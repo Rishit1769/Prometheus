@@ -1,6 +1,6 @@
 # Testing Strategy
 
-> Status: **Proposed.** No tests exist yet.
+> Status: **Implemented for the web/database foundation; expanding with future milestones.**
 
 ## Problem
 

@@ -1,7 +1,7 @@
 # Database Architecture
 
-> Status: **Proposed.** No schema is implemented. This is the intended entity model, not a final
-> specification. Do not treat this as a migration.
+> Status: **Implemented for identity; future entities remain proposed.** The initial migration is
+> `packages/database/prisma/migrations/20261006233500_init_auth_identity`.
 
 ## Problem
 
@@ -15,7 +15,14 @@ results, and lineage — while keeping its vector index close to relational data
 - pgvector provides V1 vector similarity search ([ADR-003](../decisions/ADR-003-pgvector.md)).
 - Agent identity must be stable across model changes; skills are versioned and traced.
 
-## Design — Entity Relationships
+## Implemented identity model
+
+The database package owns the Prisma schema, generated client, migrations, and singleton client.
+The first migration creates Auth.js-compatible `User`, `Account`, `Session`, and
+`VerificationToken` tables. `User` also stores GitHub username and profile URL for the basic
+authenticated identity view.
+
+## Design — Future Entity Relationships
 
 ```mermaid
 erDiagram
@@ -62,8 +69,9 @@ erDiagram
 
 ## Vector Storage
 
-A `SkillEmbedding` table (or column) stores embeddings used for candidate retrieval. Similarity
-search answers *relevance only*; it does not encode quality. See
+A `SkillEmbedding` table (or column) will store embeddings used for candidate retrieval. The
+existing PostgreSQL server's `vector` extension is reserved for that future work; this milestone
+does not implement vector search. Similarity search answers *relevance only*; it does not encode quality. See
 [Skill Discovery](../skills/skill-discovery.md).
 
 ## Invariants (Proposed)

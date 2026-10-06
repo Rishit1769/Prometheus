@@ -1,6 +1,6 @@
 # Authentication
 
-> Status: **Proposed.**
+> Status: **Implemented, pending live OAuth verification.**
 
 ## Problem
 
@@ -9,7 +9,7 @@ exposing credentials to autonomous agents.
 
 ## Context
 
-- GitHub OAuth is the planned authentication mechanism.
+- GitHub OAuth is implemented with Next.js App Router, Auth.js, and the Prisma adapter.
 - GitHub REST and GraphQL APIs provide evidence.
 - Credentials are high-value secrets (see
   [Security Architecture](../architecture/security-architecture.md)).
@@ -33,19 +33,19 @@ sequenceDiagram
     GH->>API: Redirect with authorization code
     API->>GH: Exchange code for access token
     GH-->>API: Access token
-    API->>API: Encrypt + store token; create session
+    API->>API: Persist provider account; create session
     API-->>Web: Authenticated session
 ```
 
 ### Scopes
 
-Scopes are minimized to what public analysis requires. Exact scopes are **to be finalized**;
-public read access is sufficient for V1 and private-repo scopes should be avoided.
+The default GitHub provider scope is used for this identity milestone. Public repository analysis
+and additional scopes are separate future work.
 
 ## Responsibilities
 
-- Core API performs the OAuth exchange and stores tokens encrypted.
-- Sessions are managed by the web app.
+- Auth.js performs the OAuth exchange and persists the provider account through Prisma.
+- Sessions are managed with database-backed Auth.js sessions.
 - Tokens are used server-side for ingestion and are **never** exposed to agents.
 
 ## Data Flow
@@ -64,11 +64,10 @@ See [Data Flow — GitHub Ingestion](../architecture/data-flow.md#flow-1--github
 - Requesting fewer scopes improves privacy but may limit future features.
 - Server-side token custody is safer than client-side but adds infrastructure.
 
-## Open Questions
+## Verification status
 
-- Which exact scopes are required?
-- How are tokens refreshed/revoked?
-- Is GitHub App authentication preferable to OAuth for long-lived access?
+Automated checks cover environment validation and application compilation. Live sign-in and
+database persistence require reachable PostgreSQL plus user-provided GitHub OAuth credentials.
 
 ## Related Documents
 

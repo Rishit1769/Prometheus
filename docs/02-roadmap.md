@@ -17,6 +17,7 @@ milestone is complete when code, tests, and documentation all exist (see
 ## v0.2 — GitHub Authentication
 
 - **Outcome:** A developer can authenticate via GitHub OAuth.
+- **Status:** Implemented, pending live OAuth verification.
 - **Exit criteria:** Secure OAuth flow, session handling, no token leakage to agents.
 - **Docs:** [github/authentication.md](github/authentication.md), [ADR-001](decisions/ADR-001-postgresql.md).
 

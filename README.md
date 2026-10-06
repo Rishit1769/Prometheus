@@ -38,7 +38,7 @@ skill that helped one agent will help another.
 
 ## How PROMETHEUS Works
 
-At a high level (all of the following is **Planned** — see [Project Status](#project-status)):
+At a high level (the identity foundation is implemented; the remaining pipeline is planned):
 
 1. A developer authenticates with GitHub.
 2. PROMETHEUS analyzes public repositories to produce a developer engineering profile.
@@ -76,9 +76,9 @@ repository contains documentation only.
 
 | Area | Planned technology | Status |
 |------|--------------------|--------|
-| Frontend | Next.js, TypeScript, Tailwind CSS, shadcn/ui | Planned |
-| ORM | Prisma | Planned |
-| Database | PostgreSQL | Planned |
+| Frontend | Next.js 16, TypeScript, Tailwind CSS | Implemented (foundation) |
+| ORM | Prisma 7.10 | Implemented (identity foundation) |
+| Database | PostgreSQL | Implemented (identity migration pending DB reachability) |
 | Vector search | pgvector | Planned |
 | AI/ML service | Python, FastAPI | Planned |
 | Cache / async | Redis | Planned |
@@ -106,8 +106,8 @@ Start at the documentation portal: [docs/README.md](docs/README.md).
 ## Development
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/development/](docs/development/README.md).
-There is no application code yet; contributions currently target documentation and the v0.1
-foundation.
+The application foundation is available in `apps/web` and `packages/database`; contributions now
+target the documented roadmap milestones.
 
 ## Contributing
 
@@ -116,8 +116,9 @@ described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project Status
 
-**v0.1 — Foundation + documentation.** The repository currently contains documentation only. No
-application features are implemented. Every component described in these docs is **Planned** or
+**v0.2 — Application foundation + GitHub identity.** The Next.js web foundation, Prisma schema,
+Auth.js GitHub flow, and minimal identity page are implemented. Live OAuth and migration execution
+remain pending local credentials and database reachability. Future components remain **Planned** or
 **Proposed** unless explicitly labelled **Implemented**.
 
 Status vocabulary used across this repository:

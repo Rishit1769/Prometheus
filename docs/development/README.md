@@ -1,7 +1,6 @@
 # Development
 
-> Status: **Proposed.** There is no application code yet. These documents describe intended
-> practices and will be refined as the v0.1 foundation is built.
+> Status: **Implemented for the web/database foundation; broader services remain planned.**
 
 ## Documents
 
@@ -25,8 +24,8 @@ Documentation is updated in the same pull request as the feature whenever approp
 
 ## Current State
 
-The repository contains documentation only (`docs/` and root docs). No `package.json`, Python
-project, Prisma schema, or Docker configuration exists yet.
+The repository contains the initial pnpm workspace, Next.js web app, Prisma schema, and focused
+foundation tests. Python services and Docker orchestration are future milestones.
 
 ## Related Documents
 

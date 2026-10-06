@@ -1,6 +1,6 @@
 # GitHub
 
-> Status: **Proposed.** No GitHub integration is implemented.
+> Status: **Authentication implemented; repository integration remains planned.**
 
 GitHub provides V1's evidence source for **human** engineering capability. It does **not**
 measure agent capability — that is measured by benchmarks. See
