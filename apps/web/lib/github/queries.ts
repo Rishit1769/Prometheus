@@ -168,3 +168,51 @@ export async function getReadmeEvidenceForRepository(
       : null,
   };
 }
+
+export interface DeveloperIntelligenceDto {
+  status: string;
+  evidenceHash: string;
+  promptVersion: string;
+  scoringVersion: string;
+  modelProvider: string;
+  modelName: string;
+  profileSummary: string | null;
+  overallConfidence: number;
+  eligibleRepositories: number;
+  analyzedRepositories: number;
+  reusedRepositories: number;
+  failedRepositories: number;
+  coverage: number;
+  output: unknown;
+  generatedAt: string;
+  updatedAt: string;
+}
+
+export async function getDeveloperIntelligenceForUser(userId: string, db: DatabaseClient = prisma): Promise<DeveloperIntelligenceDto | null> {
+  const profile = await db.developerIntelligence.findUnique({ where: { userId } });
+  if (!profile) return null;
+  return {
+    status: profile.status,
+    evidenceHash: profile.evidenceHash,
+    promptVersion: profile.promptVersion,
+    scoringVersion: profile.scoringVersion,
+    modelProvider: profile.modelProvider,
+    modelName: profile.modelName,
+    profileSummary: profile.profileSummary,
+    overallConfidence: profile.overallConfidence,
+    eligibleRepositories: profile.eligibleRepositories,
+    analyzedRepositories: profile.analyzedRepositories,
+    reusedRepositories: profile.reusedRepositories,
+    failedRepositories: profile.failedRepositories,
+    coverage: profile.coverage,
+    output: profile.output,
+    generatedAt: profile.generatedAt.toISOString(),
+    updatedAt: profile.updatedAt.toISOString(),
+  };
+}
+
+export async function getRepositoryIntelligenceForUser(userId: string, repositoryId: string, db: DatabaseClient = prisma) {
+  const repository = await db.repository.findFirst({ where: { id: repositoryId, userId }, select: { id: true, name: true, fullName: true, analysis: true } });
+  if (!repository) return null;
+  return { repositoryId: repository.id, name: repository.name, fullName: repository.fullName, analysis: repository.analysis };
+}
