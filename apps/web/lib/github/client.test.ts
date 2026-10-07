@@ -110,6 +110,16 @@ describe("GitHubClient.listPublicRepositories", () => {
   });
 });
 
+describe("GitHubClient.getAuthenticatedUser", () => {
+  it("validates a credential through GET /user without returning the token", async () => {
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("https://api.github.com/user");
+      return jsonResponse({ id: 42, login: "octocat" });
+    }) as unknown as typeof fetch;
+    await expect(client(fetchFn).getAuthenticatedUser({ accessToken: "secret-token" })).resolves.toEqual({ id: 42, login: "octocat" });
+  });
+});
+
 describe("GitHubClient.listRepositoryLanguages", () => {
   it("returns language byte counts", async () => {
     const fetchFn = vi.fn(async () => jsonResponse({ TypeScript: 184302, JavaScript: 42871 })) as unknown as typeof fetch;

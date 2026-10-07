@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { GitHubAccountError } from "@/lib/github/errors";
-import { getGitHubAccessToken } from "@/lib/github/sync";
+import { GitHubAccountError, GitHubAuthError } from "@/lib/github/errors";
+import { requireGitHubCredentialForUser } from "@/lib/github/credentials";
 import { syncGitHubReadmes } from "@/lib/github/readme-sync";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +16,17 @@ export async function POST() {
     );
   }
 
-  const accessToken = await getGitHubAccessToken(userId);
-  if (!accessToken) {
-    const error = new GitHubAccountError();
-    return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 });
+  let accessToken: string;
+  try {
+    accessToken = (await requireGitHubCredentialForUser(userId)).accessToken;
+  } catch (error) {
+    if (error instanceof GitHubAccountError) {
+      return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 409 });
+    }
+    if (error instanceof GitHubAuthError) {
+      return NextResponse.json({ error: { code: error.code, message: error.message } }, { status: 401 });
+    }
+    throw error;
   }
 
   const result = await syncGitHubReadmes({ userId, accessToken });

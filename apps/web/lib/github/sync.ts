@@ -1,6 +1,7 @@
 import { prisma } from "@prometheus/database";
 import { GitHubClient } from "./client";
 import { GitHubError, GitHubRateLimitError } from "./errors";
+import { getGitHubCredentialForUser } from "./credentials";
 import { normalizeLanguages, normalizeRepository } from "./normalize";
 import { persistRepository } from "./persist";
 import type {
@@ -31,11 +32,8 @@ function addError(errors: string[], message: string): void {
 
 /** Return the stored GitHub OAuth access token for a user, if connected. */
 export async function getGitHubAccessToken(userId: string, db: DatabaseClient = prisma): Promise<string | null> {
-  const account = await db.account.findFirst({
-    where: { userId, provider: "github" },
-    select: { access_token: true },
-  });
-  return account?.access_token ?? null;
+  const state = await getGitHubCredentialForUser(userId, db);
+  return state.status === "CONNECTED" ? state.credential.accessToken : null;
 }
 
 interface SyncRecordInput {

@@ -6,7 +6,8 @@ import {
   GitHubAuthError,
   GitHubRateLimitError,
 } from "@/lib/github/errors";
-import { getGitHubAccessToken, syncGitHubRepositories } from "@/lib/github/sync";
+import { requireGitHubCredentialForUser } from "@/lib/github/credentials";
+import { syncGitHubRepositories } from "@/lib/github/sync";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +29,13 @@ export async function POST() {
     return errorResponse("UNAUTHENTICATED", "You must be signed in to synchronize repositories.", 401);
   }
 
-  const accessToken = await getGitHubAccessToken(userId);
-  if (!accessToken) {
-    return errorResponse(new GitHubAccountError().code, new GitHubAccountError().message, 409);
+  let accessToken: string;
+  try {
+    accessToken = (await requireGitHubCredentialForUser(userId)).accessToken;
+  } catch (error) {
+    if (error instanceof GitHubAccountError) return errorResponse(error.code, error.message, 409);
+    if (error instanceof GitHubAuthError) return errorResponse(error.code, error.message, 401);
+    throw error;
   }
 
   try {

@@ -50,6 +50,12 @@ export interface GitHubReadmePayload {
   download_url?: string | null;
 }
 
+/** Minimal authenticated-user response used only for safe credential checks. */
+export interface GitHubAuthenticatedUserPayload {
+  id: number;
+  login: string;
+}
+
 /** Parsed rate-limit information from GitHub response headers. */
 export interface GitHubRateLimit {
   limit: number | null;

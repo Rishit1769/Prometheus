@@ -27,7 +27,7 @@ export class GitHubAccountError extends GitHubError {
 /** GitHub rejected the token (expired, revoked, or invalid). */
 export class GitHubAuthError extends GitHubError {
   constructor(message = "GitHub rejected the stored access token. Please sign in with GitHub again.") {
-    super("GITHUB_AUTH_FAILED", message);
+    super("GITHUB_REAUTH_REQUIRED", message);
     this.name = "GitHubAuthError";
   }
 }

@@ -1,6 +1,7 @@
 import { GitHubApiError, GitHubAuthError, GitHubRateLimitError } from "./errors";
 import type {
   GitHubLanguageBytes,
+  GitHubAuthenticatedUserPayload,
   GitHubRateLimit,
   GitHubReadmePayload,
   GitHubRepositoryPayload,
@@ -117,6 +118,15 @@ export class GitHubClient {
     }
 
     return { repositories, rateLimit };
+  }
+
+  /** Validate the credential through GitHub's authenticated-user endpoint. */
+  async getAuthenticatedUser(params: { accessToken: string }): Promise<GitHubAuthenticatedUserPayload> {
+    const response = await this.request<GitHubAuthenticatedUserPayload>(`${this.baseUrl}/user`, params.accessToken);
+    if (!response.data || typeof response.data.id !== "number" || typeof response.data.login !== "string") {
+      throw new GitHubApiError("GitHub returned an invalid authenticated-user response.");
+    }
+    return response.data;
   }
 
   /** Fetch language byte counts for a repository, or an empty map when unavailable. */
