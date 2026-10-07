@@ -27,6 +27,7 @@
 | `GITHUB_WEBHOOK_SECRET` | Future webhook verification |
 | `AI_SERVICE_URL` / `AI_SERVICE_API_KEY` | FastAPI service access |
 | `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OLLAMA_BASE_URL` | Model providers |
+| `AI_PROVIDER`, `AI_MODEL`, `AI_API_KEY` | PROM-004 server-side intelligence provider configuration |
 | `SANDBOX_*` | Docker sandbox limits and network policy |
 | `AUTH_SECRET` | Auth.js session encryption secret |
 

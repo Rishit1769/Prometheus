@@ -43,6 +43,10 @@ demand rigorous testing: of the software, of the benchmark pipeline, and of safe
   rate-limit status handling.
 - **README API access**: unauthenticated requests and malformed identifiers are rejected, and
   repository evidence queries are scoped to the authenticated user's ownership.
+- **Developer intelligence** (`apps/web/lib/intelligence/*.test.ts`): structured-output bounds,
+  prompt-injection-as-data behavior, deterministic evidence hashes, scoring thresholds, bounded
+  aggregation, provider isolation, repository reuse, profile reuse, and sanitized analysis API
+  errors. Tests use a mock model and do not require AI credentials.
 
 Frameworks: **Vitest** (web and database packages). Web tests use an injected `fetch` so no real
 GitHub calls occur.
@@ -73,3 +77,7 @@ Tests are required for a feature to be considered complete.
 - [Security Architecture](../architecture/security-architecture.md)
 - [Agent Adapter](../agents/agent-adapter.md)
 - [CONTRIBUTING.md](../../CONTRIBUTING.md)
+ - **Developer intelligence** (`apps/web/lib/intelligence/*.test.ts`): structured-output bounds,
+   prompt-injection-as-data behavior, deterministic evidence hashes, scoring thresholds, bounded
+   aggregation, model-provider isolation, and repository/profile reuse. Tests use a mock model and
+   do not require AI credentials.

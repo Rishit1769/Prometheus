@@ -13,7 +13,7 @@
 | v0.2 | GitHub authentication | Developer signs in via GitHub OAuth | Implemented |
 | v0.3 | Public repository ingestion | Ingest public repo metadata and languages | Implemented |
 | v0.35 | README evidence ingestion | Bounded, hashable README evidence for stored public repositories | Implemented |
-| v0.4 | Developer engineering profile | Multidimensional human capability estimate | Planned |
+| v0.4 | Developer engineering profile | Multidimensional evidence-backed capability vector | In Development |
 | v0.5 | AgentAdapter + first model integration | Register an agent and abstract its model | Planned |
 | v0.6 | Benchmark engine | Deterministic sandboxed task evaluation | Planned |
 | v0.7 | Agent capability profiles | Capability vectors from benchmark results | Planned |

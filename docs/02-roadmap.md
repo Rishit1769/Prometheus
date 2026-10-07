@@ -45,8 +45,9 @@ milestone is complete when code, tests, and documentation all exist (see
 ## v0.4 — Developer Engineering Profile
 
 - **Outcome:** A multidimensional, evidence-based developer profile.
+- **Status:** In Development (PROM-004).
 - **Exit criteria:** Documented scoring approach; explicit caveats that it is not absolute quality.
-- **Docs:** [github/developer-profile.md](github/developer-profile.md), [github/commit-intelligence.md](github/commit-intelligence.md).
+- **Docs:** [intelligence/README.md](intelligence/README.md), [intelligence/domain-scoring.md](intelligence/domain-scoring.md).
 
 ## v0.5 — AgentAdapter + First Model Integration
 

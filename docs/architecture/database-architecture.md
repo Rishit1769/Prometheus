@@ -81,6 +81,14 @@ The 256 KiB persisted limit is a safety boundary for future model context. `cont
 `contentHash` describe the complete normalized source even when `truncated` is true. This model
 does not create developer scores, historical version tables, or PROM-004 analysis records.
 
+## Implemented intelligence model (PROM-004)
+
+`RepositoryAnalysis` stores one validated current analysis per eligible repository, keyed by
+`repositoryId` and indexed by status/evidence hash. `DeveloperIntelligence` stores one current,
+user-owned capability vector with coverage, scoring/prompt versions, provider metadata, and JSON
+output. Both models cascade with their owning repository or user. Raw OAuth credentials and model
+API keys are not part of either model.
+
 ## Design — Future Entity Relationships
 
 ```mermaid
@@ -163,3 +171,11 @@ does not implement vector search. Similarity search answers *relevance only*; it
 - [ADR-002 Prisma](../decisions/ADR-002-prisma.md)
 - [ADR-003 pgvector](../decisions/ADR-003-pgvector.md)
 - [Data Flow](data-flow.md)
+
+## Implemented intelligence model (PROM-004)
+
+`RepositoryAnalysis` stores one validated current analysis per repository, keyed by
+`repositoryId` and indexed by status/evidence hash. `DeveloperIntelligence` stores one current,
+user-owned capability vector with coverage, scoring/prompt versions, provider metadata, and JSON
+output. Both models cascade with their owning repository or user. Raw OAuth credentials and model
+API keys are not part of either model.

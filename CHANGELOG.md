@@ -9,6 +9,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **PROM-004 — Developer Intelligence V0.** Repository evidence can be independently analyzed
+  through a validated model boundary and aggregated deterministically into an eight-domain
+  capability vector. README content remains untrusted evidence; no universal developer score is
+  produced.
+
 - **PROM-003 — README evidence ingestion.** Authenticated developers can synchronize bounded,
   normalized README evidence for their stored public, non-fork repositories.
   - Current per-repository evidence records preserve source path, GitHub SHA, UTF-8 content,

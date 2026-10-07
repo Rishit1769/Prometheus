@@ -17,6 +17,7 @@ them. See the format in [CONTRIBUTING.md](../../CONTRIBUTING.md) and the individ
 | [ADR-005](ADR-005-custom-agent-adapter.md) | Custom minimal `AgentAdapter` abstraction | Proposed |
 | [ADR-006](ADR-006-docker-sandbox.md) | Untrusted execution in isolated Docker environments | Proposed |
 | [ADR-007](ADR-007-github-repository-evidence.md) | GitHub repository evidence model | Accepted |
+| [ADR-010](ADR-010-developer-intelligence-pipeline.md) | Two-stage developer intelligence pipeline | Accepted |
 
 ## Format
 

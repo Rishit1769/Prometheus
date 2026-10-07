@@ -116,11 +116,12 @@ described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project Status
 
-**v0.3 — Public repository ingestion (PROM-002).** On top of the v0.2 foundation, PROMETHEUS can
+**v0.4 — Developer Intelligence V0 (PROM-004).** On top of the v0.2 foundation, PROMETHEUS can
 synchronize an authenticated developer's public GitHub repositories (metadata, languages, topics)
-into PostgreSQL, with pagination, rate-limit handling, idempotent upserts, and a minimal
-verification UI. Later milestones (developer profile, agents, benchmarks, skills) remain
-**Planned** or **Proposed** unless explicitly labelled **Implemented**.
+into PostgreSQL, ingest bounded README evidence, and analyze that evidence into a deterministic
+eight-domain capability vector. The profile is evidence-backed and confidence-aware; it does not
+claim code quality, authorship, seniority, or production reliability. PROM-005 building state
+remains **Planned**.
 
 Status vocabulary used across this repository:
 
