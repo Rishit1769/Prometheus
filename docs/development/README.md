@@ -24,7 +24,7 @@ Documentation is updated in the same pull request as the feature whenever approp
 
 ## Current State
 
-The repository contains the initial pnpm workspace, Next.js web app, Prisma schema, and focused
+The repository contains the initial npm workspace, Next.js web app, Prisma schema, and focused
 foundation tests. Python services and Docker orchestration are future milestones.
 
 ## Related Documents

@@ -11,9 +11,6 @@ dist/
 build/
 *.tsbuildinfo
 npm-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.pnpm-store/
 
 # Python / FastAPI
 __pycache__/

@@ -12,7 +12,7 @@ live verification.
 
 | Tool | Purpose |
 |------|---------|
-| Node.js 20.9+ and pnpm 11 | Next.js web app and TypeScript core |
+| Node.js 20.9+ and npm | Next.js web app and TypeScript core |
 | Python | FastAPI AI/ML service |
 | Docker + Docker Compose | PostgreSQL, Redis, MinIO, and the sandbox |
 | PostgreSQL with pgvector | Primary database and vector search |
@@ -31,10 +31,10 @@ live verification.
 ## Local Workflow
 
 1. Copy `.env.example` to `.env` and fill in values (see [Environment Variables](environment-variables.md)).
-2. Install dependencies with `pnpm install`.
-3. Verify PostgreSQL and pgvector with `pnpm db:test`.
-4. Apply the reviewed migrations with `pnpm db:migrate`.
-5. Start the web app with `pnpm dev` and open `http://localhost:3000`.
+2. Install dependencies with `npm install`.
+3. Verify PostgreSQL and pgvector with `npm run db:test`.
+4. Apply the reviewed migrations with `npm run db:migrate`.
+5. Start the web app with `npm run dev` and open `http://localhost:3000`.
 6. Sign in with GitHub after registering the callback URL below.
 7. Open `http://localhost:3000/repositories` and click **Sync repositories**.
 
@@ -48,7 +48,7 @@ idempotent: running it twice does not create duplicates. See
 [Repository Ingestion](../github/repository-ingestion.md) for behavior, error states, and
 limitations.
 
-Run the test suite (including database-integration tests) with `pnpm test`. Database tests skip
+Run the test suite (including database-integration tests) with `npm test`. Database tests skip
 when `DATABASE_URL` is not configured.
 
 ## OAuth callback

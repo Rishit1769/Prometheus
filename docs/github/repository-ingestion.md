@@ -136,14 +136,14 @@ and lists results, showing never-synced, success, partial, failed, and rate-limi
 ## How to Run a Sync Locally
 
 1. Ensure `.env` has `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GITHUB_ID`, and `AUTH_GITHUB_SECRET`.
-2. `pnpm install`, then `pnpm db:migrate` (applies reviewed migrations).
-3. `pnpm dev`, sign in with GitHub, open `http://localhost:3000/repositories`, and click
+2. `npm install`, then `npm run db:migrate` (applies reviewed migrations).
+3. `npm run dev`, sign in with GitHub, open `http://localhost:3000/repositories`, and click
    **Sync repositories**.
 4. Run it a second time and confirm the repository count does not change.
 
 ## How to Test
 
-- `pnpm test` runs the web and database suites, including GitHub client, normalization, and
+- `npm test` runs the web and database suites, including GitHub client, normalization, and
   database-integration tests.
 - Database-integration tests create an isolated test user, exercise create/update/idempotency/
   partial-failure/rate-limit paths, and delete the user afterwards. They are skipped when
