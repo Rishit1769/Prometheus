@@ -71,6 +71,7 @@ model Repository {
   description        String?
   url                String
   isFork             Boolean  @default(false)
+  isPrivate          Boolean  @default(false)
   isArchived         Boolean  @default(false)
   isTemplate         Boolean  @default(false)
   defaultBranch      String?
@@ -89,8 +90,40 @@ model Repository {
   updatedAt          DateTime @updatedAt
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   languages          RepositoryLanguage[]
+  readmeEvidence     RepositoryReadmeEvidence?
 
   @@index([userId])
+}
+
+enum RepositoryReadmeStatus {
+  AVAILABLE
+  MISSING
+  EMPTY
+  TRUNCATED
+  FETCH_FAILED
+  RATE_LIMITED
+  AUTH_FAILED
+}
+
+/// The current bounded README evidence for a public repository. The content is
+/// untrusted source data, not a developer score or an instruction set.
+model RepositoryReadmeEvidence {
+  id           String               @id @default(cuid())
+  repositoryId String               @unique
+  sourcePath   String?
+  githubSha    String?
+  content      String?
+  contentHash  String?
+  contentBytes Int?
+  truncated    Boolean              @default(false)
+  encoding     String               @default("utf-8")
+  status       RepositoryReadmeStatus
+  fetchedAt    DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  repository   Repository            @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([status])
 }
 
 /// Language byte evidence for a repository. Replaced on each sync so stale
