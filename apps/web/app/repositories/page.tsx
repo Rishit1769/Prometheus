@@ -55,6 +55,9 @@ export default async function RepositoriesPage() {
       <Link className="text-sm text-indigo-600 hover:underline" href="/">
         ← PROMETHEUS
       </Link>
+      <Link className="mt-4 text-sm text-indigo-600 hover:underline" href="/developer">
+        View Developer Intelligence →
+      </Link>
       <h1 className="mt-6 text-3xl font-semibold tracking-tight">GitHub Repositories</h1>
       <p className="mt-2 text-slate-600">
         Last synchronized: {latestSync ? formatDate(latestSync.completedAt ?? latestSync.startedAt) : "Never"}
