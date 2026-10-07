@@ -14,10 +14,16 @@ export function SyncReadmesButton() {
     try {
       const response = await fetch("/api/github/readmes/sync", { method: "POST" });
       const body = (await response.json().catch(() => null)) as
-        | { created?: number; updated?: number; unchanged?: number; error?: { message?: string } }
+        | { created?: number; updated?: number; unchanged?: number; error?: { code?: string; message?: string } }
         | null;
       if (!response.ok) {
-        setState({ phase: "error", message: body?.error?.message ?? "README synchronization failed." });
+        setState({
+          phase: "error",
+          message:
+            body?.error?.code === "GITHUB_REAUTH_REQUIRED"
+              ? "Your GitHub authorization expired or was revoked. Use Reconnect GitHub to continue."
+              : body?.error?.message ?? "README synchronization failed.",
+        });
         return;
       }
       setState({

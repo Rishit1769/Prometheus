@@ -29,6 +29,7 @@ export default async function Home() {
             <div><dt className="font-medium text-slate-500">GitHub profile</dt><dd className="mt-1">{user.githubProfileUrl ? <a className="text-indigo-600 hover:underline" href={user.githubProfileUrl}>Open profile</a> : "Not available"}</dd></div>
           </dl>
           <form action={async () => { "use server"; await signOut(); }} className="mt-8"><button className="rounded-lg border border-slate-300 px-5 py-3 font-medium hover:bg-slate-50" type="submit">Log out</button></form>
+          <form action={async () => { "use server"; await signIn("github", { redirectTo: "/" }); }} className="mt-3"><button className="text-sm text-indigo-600 hover:underline" type="submit">Reconnect GitHub</button></form>
         </section>
       )}
     </main>

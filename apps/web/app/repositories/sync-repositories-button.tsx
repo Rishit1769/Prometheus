@@ -14,7 +14,7 @@ interface SyncResponse {
   repositoriesCreated?: number;
   repositoriesUpdated?: number;
   repositoriesFailed?: number;
-  error?: { message?: string };
+  error?: { code?: string; message?: string };
 }
 
 export function SyncRepositoriesButton() {
@@ -30,7 +30,10 @@ export function SyncRepositoriesButton() {
       if (!response.ok) {
         setState({
           phase: "error",
-          message: body?.error?.message ?? "Repository synchronization failed.",
+          message:
+            body?.error?.code === "GITHUB_REAUTH_REQUIRED"
+              ? "Your GitHub authorization expired or was revoked. Use Reconnect GitHub to continue."
+              : body?.error?.message ?? "Repository synchronization failed.",
         });
         return;
       }

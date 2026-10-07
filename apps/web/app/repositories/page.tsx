@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import { signIn } from "@/lib/auth";
 import { getLatestSyncForUser, listRepositoriesForUser } from "@/lib/github/queries";
 import { SyncRepositoriesButton } from "./sync-repositories-button";
 import { SyncReadmesButton } from "./sync-readmes-button";
@@ -58,6 +59,9 @@ export default async function RepositoriesPage() {
       <p className="mt-2 text-slate-600">
         Last synchronized: {latestSync ? formatDate(latestSync.completedAt ?? latestSync.startedAt) : "Never"}
       </p>
+      <form action={async () => { "use server"; await signIn("github", { redirectTo: "/repositories" }); }} className="mt-3">
+        <button className="text-sm text-indigo-600 hover:underline" type="submit">Reconnect GitHub</button>
+      </form>
 
       <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
