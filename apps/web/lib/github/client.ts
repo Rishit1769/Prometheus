@@ -1,5 +1,11 @@
 import { GitHubApiError, GitHubAuthError, GitHubRateLimitError } from "./errors";
-import type { GitHubLanguageBytes, GitHubRateLimit, GitHubRepositoryPayload } from "./types";
+import type {
+  GitHubLanguageBytes,
+  GitHubRateLimit,
+  GitHubReadmePayload,
+  GitHubRepositoryPayload,
+} from "./types";
+import { GitHubNotFoundError } from "./errors";
 
 const DEFAULT_BASE_URL = "https://api.github.com";
 const DEFAULT_USER_AGENT = "prometheus-github-client";
@@ -128,6 +134,18 @@ export class GitHubClient {
     return response.data;
   }
 
+  /** Fetch the repository's README through GitHub's supported README endpoint. */
+  async getRepositoryReadme(params: { accessToken: string; fullName: string }): Promise<GitHubReadmePayload> {
+    const [owner, repo] = params.fullName.split("/");
+    if (!owner || !repo) throw new GitHubNotFoundError();
+    const url = `${this.baseUrl}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme`;
+    const response = await this.request<GitHubReadmePayload>(url, params.accessToken);
+    if (!response.data || typeof response.data !== "object" || Array.isArray(response.data)) {
+      throw new GitHubApiError("GitHub returned an invalid README response.");
+    }
+    return response.data;
+  }
+
   private async request<T>(url: string, accessToken: string): Promise<GitHubResponse<T>> {
     let attempt = 0;
 
@@ -160,6 +178,10 @@ export class GitHubClient {
 
       if (response.status === 401) {
         throw new GitHubAuthError();
+      }
+
+      if (response.status === 404) {
+        throw new GitHubNotFoundError();
       }
 
       if (isRateLimited(response, rateLimit)) {

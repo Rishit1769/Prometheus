@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { getLatestSyncForUser, listRepositoriesForUser } from "@/lib/github/queries";
 import { SyncRepositoriesButton } from "./sync-repositories-button";
+import { SyncReadmesButton } from "./sync-readmes-button";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,7 @@ export default async function RepositoriesPage() {
             ) : null}
           </div>
           <SyncRepositoriesButton />
+          <SyncReadmesButton />
         </div>
       </section>
 
@@ -90,6 +92,8 @@ export default async function RepositoriesPage() {
                 {repository.isArchived ? <span className="rounded bg-amber-100 px-2 py-0.5 text-amber-800">archived</span> : null}
                 {repository.isTemplate ? <span className="rounded bg-slate-100 px-2 py-0.5">template</span> : null}
                 <span>{repository.primaryLanguage ?? "Unknown"}</span>
+                <span>·</span>
+                <span>README: {repository.readmeEvidence?.status ?? "Not synced"}</span>
                 <span>·</span>
                 <span>Updated {formatDate(repository.githubUpdatedAt)}</span>
               </div>

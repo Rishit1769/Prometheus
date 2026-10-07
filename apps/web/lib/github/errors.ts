@@ -32,6 +32,14 @@ export class GitHubAuthError extends GitHubError {
   }
 }
 
+/** The repository has no README according to GitHub. */
+export class GitHubNotFoundError extends GitHubError {
+  constructor(message = "GitHub README was not found for this repository.") {
+    super("GITHUB_NOT_FOUND", message);
+    this.name = "GitHubNotFoundError";
+  }
+}
+
 /** GitHub rate limit has been exhausted. */
 export class GitHubRateLimitError extends GitHubError {
   readonly rateLimit: GitHubRateLimit;

@@ -45,6 +45,7 @@ export function normalizeRepository(raw: GitHubRepositoryPayload): NormalizedRep
     description: raw.description ?? null,
     url: raw.html_url,
     isFork: Boolean(raw.fork),
+    isPrivate: Boolean(raw.private),
     isArchived: Boolean(raw.archived),
     isTemplate: Boolean(raw.is_template),
     defaultBranch: raw.default_branch ?? null,

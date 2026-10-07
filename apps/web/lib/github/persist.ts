@@ -39,6 +39,7 @@ export async function persistRepository(
       description: repository.description,
       url: repository.url,
       isFork: repository.isFork,
+      isPrivate: repository.isPrivate,
       isArchived: repository.isArchived,
       isTemplate: repository.isTemplate,
       defaultBranch: repository.defaultBranch,

@@ -38,6 +38,18 @@ export interface GitHubRepositoryPayload {
 /** GitHub's languages endpoint returns a map of language name to byte count. */
 export type GitHubLanguageBytes = Record<string, number>;
 
+/** GitHub's repository README endpoint response. */
+export interface GitHubReadmePayload {
+  type?: string;
+  encoding?: string;
+  size?: number;
+  name?: string;
+  path?: string;
+  content?: string;
+  sha?: string;
+  download_url?: string | null;
+}
+
 /** Parsed rate-limit information from GitHub response headers. */
 export interface GitHubRateLimit {
   limit: number | null;
@@ -54,6 +66,7 @@ export interface NormalizedRepository {
   description: string | null;
   url: string;
   isFork: boolean;
+  isPrivate: boolean;
   isArchived: boolean;
   isTemplate: boolean;
   defaultBranch: string | null;
@@ -88,6 +101,10 @@ export interface GitHubRepositorySource {
     accessToken: string;
   }): Promise<{ repositories: GitHubRepositoryPayload[]; rateLimit: GitHubRateLimit }>;
   listRepositoryLanguages(params: { accessToken: string; fullName: string }): Promise<GitHubLanguageBytes>;
+}
+
+export interface GitHubReadmeSource {
+  getRepositoryReadme(params: { accessToken: string; fullName: string }): Promise<GitHubReadmePayload>;
 }
 
 /** Result of a synchronization run, safe to return to the client. */

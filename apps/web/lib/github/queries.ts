@@ -34,6 +34,16 @@ export interface RepositoryDto {
   githubPushedAt: string | null;
   lastSyncedAt: string;
   languages: RepositoryLanguageDto[];
+  readmeEvidence: {
+    sourcePath: string | null;
+    githubSha: string | null;
+    contentHash: string | null;
+    contentBytes: number | null;
+    truncated: boolean;
+    encoding: string;
+    status: string;
+    fetchedAt: string | null;
+  } | null;
 }
 
 export interface LatestSyncDto {
@@ -55,7 +65,7 @@ export async function listRepositoriesForUser(userId: string, db: DatabaseClient
   const repositories = await db.repository.findMany({
     where: { userId },
     orderBy: [{ githubUpdatedAt: "desc" }, { fullName: "asc" }],
-    include: { languages: { orderBy: { bytes: "desc" } } },
+    include: { languages: { orderBy: { bytes: "desc" } }, readmeEvidence: true },
   });
 
   return repositories.map((repository) => ({
@@ -86,6 +96,18 @@ export async function listRepositoriesForUser(userId: string, db: DatabaseClient
       bytes: language.bytes,
       percentage: language.percentage,
     })),
+    readmeEvidence: repository.readmeEvidence
+      ? {
+          sourcePath: repository.readmeEvidence.sourcePath,
+          githubSha: repository.readmeEvidence.githubSha,
+          contentHash: repository.readmeEvidence.contentHash,
+          contentBytes: repository.readmeEvidence.contentBytes,
+          truncated: repository.readmeEvidence.truncated,
+          encoding: repository.readmeEvidence.encoding,
+          status: repository.readmeEvidence.status,
+          fetchedAt: repository.readmeEvidence.fetchedAt?.toISOString() ?? null,
+        }
+      : null,
   }));
 }
 
@@ -109,5 +131,40 @@ export async function getLatestSyncForUser(userId: string, db: DatabaseClient = 
     rateLimitRemaining: sync.rateLimitRemaining,
     rateLimitResetAt: sync.rateLimitResetAt?.toISOString() ?? null,
     errorMessage: sync.errorMessage,
+  };
+}
+
+/** Read one repository's README evidence only when it belongs to the session user. */
+export async function getReadmeEvidenceForRepository(
+  userId: string,
+  repositoryId: string,
+  db: DatabaseClient = prisma,
+) {
+  const repository = await db.repository.findFirst({
+    where: { id: repositoryId, userId },
+    select: {
+      id: true,
+      fullName: true,
+      readmeEvidence: true,
+    },
+  });
+  if (!repository) return null;
+
+  return {
+    repositoryId: repository.id,
+    fullName: repository.fullName,
+    evidence: repository.readmeEvidence
+      ? {
+          sourcePath: repository.readmeEvidence.sourcePath,
+          githubSha: repository.readmeEvidence.githubSha,
+          content: repository.readmeEvidence.content,
+          contentHash: repository.readmeEvidence.contentHash,
+          contentBytes: repository.readmeEvidence.contentBytes,
+          truncated: repository.readmeEvidence.truncated,
+          encoding: repository.readmeEvidence.encoding,
+          status: repository.readmeEvidence.status,
+          fetchedAt: repository.readmeEvidence.fetchedAt?.toISOString() ?? null,
+        }
+      : null,
   };
 }
