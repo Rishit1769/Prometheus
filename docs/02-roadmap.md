@@ -1,7 +1,10 @@
 # Roadmap
 
-> Status: **Proposed.** Milestones are targets, not commitments. Adjust as repository state
-> changes. The root [ROADMAP.md](../ROADMAP.md) provides the condensed view.
+> Status: **Active.** Milestones are targets, not commitments, but v0.1–v0.3 have begun to land.
+> The root [ROADMAP.md](../ROADMAP.md) provides the condensed view.
+
+Milestone identifiers also map to the project's issue codes: **PROM-001** = v0.2 (Foundation +
+GitHub OAuth) and **PROM-002** = v0.3 (Public Repository Ingestion).
 
 Each milestone lists its outcome, the documents it will affect, and its exit criteria. A
 milestone is complete when code, tests, and documentation all exist (see
@@ -17,15 +20,17 @@ milestone is complete when code, tests, and documentation all exist (see
 ## v0.2 — GitHub Authentication
 
 - **Outcome:** A developer can authenticate via GitHub OAuth.
-- **Status:** Implemented, pending live OAuth verification.
+- **Status:** Implemented (PROM-001).
 - **Exit criteria:** Secure OAuth flow, session handling, no token leakage to agents.
 - **Docs:** [github/authentication.md](github/authentication.md), [ADR-001](decisions/ADR-001-postgresql.md).
 
 ## v0.3 — Public Repository Ingestion
 
-- **Outcome:** Ingest public repository metadata and history.
-- **Exit criteria:** Paginated REST/GraphQL ingestion with rate-limit handling and idempotency.
-- **Docs:** [github/repository-ingestion.md](github/repository-ingestion.md), [architecture/data-flow.md](architecture/data-flow.md).
+- **Outcome:** Ingest public repository metadata, languages, and topics; idempotent sync.
+- **Status:** Implemented (PROM-002). See
+  [github/repository-ingestion.md](github/repository-ingestion.md).
+- **Exit criteria:** Paginated REST ingestion with rate-limit handling and idempotency — met.
+- **Docs:** [github/repository-ingestion.md](github/repository-ingestion.md), [architecture/data-flow.md](architecture/data-flow.md), [ADR-007](decisions/ADR-007-github-repository-evidence.md).
 
 ## v0.4 — Developer Engineering Profile
 

@@ -93,6 +93,7 @@ Status labels used throughout:
 - [ADR-004: FastAPI AI Service](decisions/ADR-004-fastapi-ai-service.md)
 - [ADR-005: Custom Agent Adapter](decisions/ADR-005-custom-agent-adapter.md)
 - [ADR-006: Docker Sandbox](decisions/ADR-006-docker-sandbox.md)
+- [ADR-007: GitHub Repository Evidence](decisions/ADR-007-github-repository-evidence.md)
 
 ## Related Root Documents
 

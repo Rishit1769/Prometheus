@@ -116,10 +116,11 @@ described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Project Status
 
-**v0.2 — Application foundation + GitHub identity.** The Next.js web foundation, Prisma schema,
-Auth.js GitHub flow, and minimal identity page are implemented. Live OAuth and migration execution
-remain pending local credentials and database reachability. Future components remain **Planned** or
-**Proposed** unless explicitly labelled **Implemented**.
+**v0.3 — Public repository ingestion (PROM-002).** On top of the v0.2 foundation, PROMETHEUS can
+synchronize an authenticated developer's public GitHub repositories (metadata, languages, topics)
+into PostgreSQL, with pagination, rate-limit handling, idempotent upserts, and a minimal
+verification UI. Later milestones (developer profile, agents, benchmarks, skills) remain
+**Planned** or **Proposed** unless explicitly labelled **Implemented**.
 
 Status vocabulary used across this repository:
 

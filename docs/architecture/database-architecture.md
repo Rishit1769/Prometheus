@@ -1,7 +1,8 @@
 # Database Architecture
 
-> Status: **Implemented for identity; future entities remain proposed.** The initial migration is
-> `packages/database/prisma/migrations/20261006233500_init_auth_identity`.
+> Status: **Implemented for identity and public repository evidence; future entities remain
+> proposed.** Migrations: `packages/database/prisma/migrations/20261006233500_init_auth_identity`
+> and `20261007140112_github_repository_ingestion`.
 
 ## Problem
 
@@ -21,6 +22,52 @@ The database package owns the Prisma schema, generated client, migrations, and s
 The first migration creates Auth.js-compatible `User`, `Account`, `Session`, and
 `VerificationToken` tables. `User` also stores GitHub username and profile URL for the basic
 authenticated identity view.
+
+## Implemented repository evidence model (PROM-002)
+
+The second migration adds raw public-repository evidence:
+
+```mermaid
+erDiagram
+    USER ||--o{ REPOSITORY : owns
+    USER ||--o{ GITHUB_REPOSITORY_SYNC : "runs"
+    REPOSITORY ||--o{ REPOSITORY_LANGUAGE : "has languages"
+
+    REPOSITORY {
+      string id PK
+      string userId FK
+      bigint githubRepositoryId UK
+      string ownerLogin
+      string fullName
+      string primaryLanguage
+      string[] topics
+      datetime lastSyncedAt
+    }
+    REPOSITORY_LANGUAGE {
+      string id PK
+      string repositoryId FK
+      string language
+      int bytes
+      float percentage
+    }
+    GITHUB_REPOSITORY_SYNC {
+      string id PK
+      string userId FK
+      enum status
+      int repositoriesFound
+      int repositoriesCreated
+      int repositoriesUpdated
+      int repositoriesFailed
+    }
+```
+
+- `githubRepositoryId` is the unique external identity (GitHub's immutable repository id,
+  stored as `BIGINT`).
+- `RepositoryLanguage` is unique on `(repositoryId, language)`; rows are replaced on each sync.
+- `topics` is a PostgreSQL `String[]` column.
+- `GitHubRepositorySync` records each run with status and rate-limit information.
+
+Design rationale: [ADR-007](../decisions/ADR-007-github-repository-evidence.md).
 
 ## Design — Future Entity Relationships
 

@@ -9,15 +9,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Initial documentation system under `docs/` (project, architecture, agents, skills,
-  benchmarks, GitHub, research, development, and decision records).
-- Root documentation: `README.md`, `ARCHITECTURE.md`, `ROADMAP.md`, `CONTRIBUTING.md`,
-  `SECURITY.md`, `CHANGELOG.md`, and `.env.example`.
+- **PROM-002 — Public GitHub repository ingestion.** Authenticated developers can synchronize
+  their public GitHub repositories into PostgreSQL.
+  - Prisma models `Repository`, `RepositoryLanguage`, and `GitHubRepositorySync`
+    (migration `20261007140112_github_repository_ingestion`).
+  - A minimal authenticated GitHub REST client with pagination, API-version headers, rate-limit
+    detection, and bounded transitive retries.
+  - A normalization layer and idempotent, transactional persistence layer.
+  - Authenticated API routes `POST /api/github/repositories/sync` and
+    `GET /api/github/repositories`.
+  - A minimal `/repositories` page to trigger and verify synchronization.
+  - Unit and database-integration tests for the client, normalization, persistence, idempotency,
+    and request authentication.
+
+### Changed
+
+- `packages/database/package.json` `db:migrate` no longer hardcodes the initial migration name.
+- Root `ROADMAP.md`, `docs/02-roadmap.md`, and `docs/github/*` updated to reflect PROM-002.
 
 ### Notes
 
-- No application features are implemented. All described functionality is **Planned** or
-  **Proposed** unless explicitly labelled otherwise.
+- All later capabilities (developer profile, agents, benchmarks, skills) remain **Planned** or
+  **Proposed**.
 
 ## [0.1.0] - 2026-10-06
 

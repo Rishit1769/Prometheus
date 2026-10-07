@@ -26,6 +26,21 @@ demand rigorous testing: of the software, of the benchmark pipeline, and of safe
 - **Secrets:** tests assert credentials are never passed to agents or sandboxes.
 - **Idempotency:** repeated ingestion does not duplicate records.
 
+## Current Coverage (PROM-001, PROM-002)
+
+- **GitHub client** (`apps/web/lib/github/client.test.ts`): success, pagination, empty result,
+  401/auth failure, rate-limit response, 5xx, network failure, languages, header assertions.
+- **Normalization** (`normalize.test.ts`): field mapping, null description, fork/archived/template
+  metadata, empty repository, timestamps, language byte percentages, empty topics.
+- **Persistence & sync** (`sync.test.ts`): create, metadata update, duplicate prevention
+  (idempotency), language replacement, topics, ownership, partial language failure, rate-limit
+  and auth-error records. These are database-integration tests, skipped without `DATABASE_URL`.
+- **API authentication** (`route.test.ts`): unauthenticated sync is rejected; the user is derived
+  from the session; safe error mapping; no secret leakage.
+
+Frameworks: **Vitest** (web and database packages). Web tests use an injected `fetch` so no real
+GitHub calls occur.
+
 ## Definition of Done
 
 ```

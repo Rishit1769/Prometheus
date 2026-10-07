@@ -33,11 +33,23 @@ live verification.
 1. Copy `.env.example` to `.env` and fill in values (see [Environment Variables](environment-variables.md)).
 2. Install dependencies with `pnpm install`.
 3. Verify PostgreSQL and pgvector with `pnpm db:test`.
-4. Apply the reviewed migration with `pnpm db:migrate`.
+4. Apply the reviewed migrations with `pnpm db:migrate`.
 5. Start the web app with `pnpm dev` and open `http://localhost:3000`.
 6. Sign in with GitHub after registering the callback URL below.
+7. Open `http://localhost:3000/repositories` and click **Sync repositories**.
 
 The AI service and other infrastructure remain future work and are not started by this milestone.
+
+## Repository synchronization (PROM-002)
+
+The `/repositories` page and the `POST /api/github/repositories/sync` endpoint synchronize the
+signed-in developer's **public** repositories (metadata, languages, topics). Synchronization is
+idempotent: running it twice does not create duplicates. See
+[Repository Ingestion](../github/repository-ingestion.md) for behavior, error states, and
+limitations.
+
+Run the test suite (including database-integration tests) with `pnpm test`. Database tests skip
+when `DATABASE_URL` is not configured.
 
 ## OAuth callback
 

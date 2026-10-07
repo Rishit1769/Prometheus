@@ -1,6 +1,7 @@
 # GitHub
 
-> Status: **Authentication implemented; repository integration remains planned.**
+> Status: **Authentication and public repository ingestion implemented (PROM-001, PROM-002).**
+> Commit ingestion, developer profiling, and commit intelligence remain planned.
 
 GitHub provides V1's evidence source for **human** engineering capability. It does **not**
 measure agent capability — that is measured by benchmarks. See

@@ -30,6 +30,10 @@
 | `SANDBOX_*` | Docker sandbox limits and network policy |
 | `AUTH_SECRET` | Auth.js session encryption secret |
 
+PROM-002 (repository ingestion) requires only `DATABASE_URL` and the `AUTH_*` variables. It uses
+the OAuth access token stored on the user's GitHub `Account` row — no additional token is
+configured. `GITHUB_TOKEN` is **not** used by PROM-002.
+
 See [.env.example](../../.env.example) for the full annotated list.
 
 ## Security Notes
