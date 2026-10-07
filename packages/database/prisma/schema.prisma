@@ -20,6 +20,7 @@ model User {
   sessions          Session[]
   repositories      Repository[]
   repositorySyncs   GitHubRepositorySync[]
+  intelligence       DeveloperIntelligence?
 }
 
 model Account {
@@ -92,6 +93,7 @@ model Repository {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   languages          RepositoryLanguage[]
   readmeEvidence     RepositoryReadmeEvidence?
+  analysis           RepositoryAnalysis?
 
   @@index([userId])
 }
@@ -166,4 +168,64 @@ model GitHubRepositorySync {
   user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+enum RepositoryAnalysisStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+  STALE
+}
+
+/// Validated, evidence-backed interpretation of one repository. The JSON
+/// output is canonical application data, not an unvalidated model transcript.
+model RepositoryAnalysis {
+  id              String                  @id @default(cuid())
+  repositoryId    String                  @unique
+  status          RepositoryAnalysisStatus @default(PENDING)
+  evidenceHash    String
+  promptVersion   String
+  modelProvider   String
+  modelName       String
+  output          Json?
+  errorMessage    String?
+  analyzedAt      DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  repository      Repository              @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([evidenceHash])
+}
+
+enum DeveloperIntelligenceStatus {
+  COMPLETE
+  PARTIAL
+  FAILED
+}
+
+/// Current developer-level capability vector derived from repository analyses.
+model DeveloperIntelligence {
+  id                    String                       @id @default(cuid())
+  userId                String                       @unique
+  status                DeveloperIntelligenceStatus
+  evidenceHash          String
+  promptVersion         String
+  scoringVersion        String
+  modelProvider         String
+  modelName             String
+  profileSummary        String?
+  overallConfidence     Float
+  eligibleRepositories  Int
+  analyzedRepositories  Int
+  reusedRepositories    Int
+  failedRepositories    Int
+  coverage              Float
+  output                Json
+  generatedAt           DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  user                  User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([evidenceHash])
 }
