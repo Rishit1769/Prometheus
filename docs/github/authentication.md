@@ -1,6 +1,6 @@
 # Authentication
 
-> Status: **Implemented, pending live OAuth verification.**
+> Status: **Implemented.** Live verification requires a reachable local PostgreSQL instance and interactive GitHub OAuth authorization.
 
 ## Problem
 
@@ -46,7 +46,27 @@ and additional scopes are separate future work.
 
 - Auth.js performs the OAuth exchange and persists the provider account through Prisma.
 - Sessions are managed with database-backed Auth.js sessions.
-- Tokens are used server-side for ingestion and are **never** exposed to agents.
+- Tokens are used server-side for ingestion and are **never** exposed to agents or API responses.
+
+### Session and GitHub authorization
+
+PROMETHEUS database sessions and GitHub authorization are separate states. A valid PROMETHEUS
+session may remain active while GitHub returns `401`; ingestion then reports
+`GITHUB_REAUTH_REQUIRED` and the UI offers **Reconnect GitHub**.
+
+The credential service is the only application boundary that reads `Account.access_token` for
+repository or README synchronization. It scopes the lookup to the authenticated PROMETHEUS user,
+rejects missing or expired credentials, and passes the token only to the server-side GitHub client.
+
+The installed GitHub provider requests `read:user user:email`. This application currently returns
+an expiring access token and refresh token, including `expires_in` and
+`refresh_token_expires_in`; the provider mapping persists both expiry values. The credential
+service refreshes an expired access token and stores rotated tokens. If refresh fails or the
+refresh token expires, normal GitHub OAuth reconnect is required.
+
+On reconnect, the Auth.js `signIn` event updates the existing Account row using GitHub's
+authoritative `providerAccountId` plus the current PROMETHEUS `userId`. It replaces the access
+token and clears stale expiry/refresh metadata, without deleting users or linking arbitrary identities.
 
 ## Data Flow
 
@@ -55,9 +75,9 @@ See [Data Flow — GitHub Ingestion](../architecture/data-flow.md#flow-1--github
 ## Security Considerations
 
 - Never expose GitHub credentials directly to autonomous agents.
-- Store tokens encrypted at rest; never log them.
+- Store tokens encrypted at rest; never log or return them.
 - Use state parameters to prevent CSRF in the OAuth flow.
-- Support token revocation and rotation.
+- Treat GitHub `401` as reauthentication-required; refresh only through GitHub's documented token endpoint.
 
 ## Trade-offs
 
@@ -66,8 +86,9 @@ See [Data Flow — GitHub Ingestion](../architecture/data-flow.md#flow-1--github
 
 ## Verification status
 
-Automated checks cover environment validation and application compilation. Live sign-in and
-database persistence require reachable PostgreSQL plus user-provided GitHub OAuth credentials.
+Automated checks cover credential classification, reconnect scoping, safe `GET /user` validation,
+and application compilation. Live sign-in and database persistence require reachable PostgreSQL
+plus interactive GitHub OAuth authorization.
 
 ## Related Documents
 
