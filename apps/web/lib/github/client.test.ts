@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GitHubClient } from "./client";
-import { GitHubApiError, GitHubAuthError, GitHubRateLimitError } from "./errors";
+import { GitHubApiError, GitHubAuthError, GitHubNotFoundError, GitHubRateLimitError } from "./errors";
 import type { GitHubRepositoryPayload } from "./types";
 
 function repo(id: number, overrides: Partial<GitHubRepositoryPayload> = {}): GitHubRepositoryPayload {
@@ -121,5 +121,30 @@ describe("GitHubClient.listRepositoryLanguages", () => {
     const fetchFn = vi.fn(async () => jsonResponse({})) as unknown as typeof fetch;
     const result = await client(fetchFn).listRepositoryLanguages({ accessToken: "t", fullName: "owner/repo" });
     expect(result).toEqual({});
+  });
+});
+
+describe("GitHubClient.getRepositoryReadme", () => {
+  it("uses the supported README endpoint and returns metadata", async () => {
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe("https://api.github.com/repos/owner/repo/readme");
+      return jsonResponse({
+        encoding: "base64",
+        content: Buffer.from("# README", "utf8").toString("base64"),
+        path: "README.md",
+        sha: "abc123",
+      });
+    }) as unknown as typeof fetch;
+
+    const result = await client(fetchFn).getRepositoryReadme({ accessToken: "t", fullName: "owner/repo" });
+    expect(result.path).toBe("README.md");
+    expect(result.sha).toBe("abc123");
+  });
+
+  it("maps GitHub 404 to a missing README error", async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ message: "Not Found" }, { status: 404 })) as unknown as typeof fetch;
+    await expect(client(fetchFn).getRepositoryReadme({ accessToken: "t", fullName: "owner/repo" })).rejects.toBeInstanceOf(
+      GitHubNotFoundError,
+    );
   });
 });
