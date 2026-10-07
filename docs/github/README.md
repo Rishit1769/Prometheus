@@ -1,6 +1,7 @@
 # GitHub
 
-> Status: **Authentication and public repository ingestion implemented (PROM-001, PROM-002).**
+> Status: **Authentication, public repository ingestion, and README evidence implemented
+> (PROM-001, PROM-002, PROM-003).**
 > Commit ingestion, developer profiling, and commit intelligence remain planned.
 
 GitHub provides V1's evidence source for **human** engineering capability. It does **not**
@@ -11,6 +12,7 @@ measure agent capability — that is measured by benchmarks. See
 
 - [Authentication](authentication.md) — GitHub OAuth and token handling.
 - [Repository Ingestion](repository-ingestion.md) — public repository analysis.
+- [README Evidence](readme-evidence.md) — bounded, hashable README source evidence.
 - [Developer Profile](developer-profile.md) — evidence-based engineering profile.
 - [Commit Intelligence](commit-intelligence.md) — future ML analysis of contribution impact.
 

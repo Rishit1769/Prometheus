@@ -26,7 +26,7 @@ demand rigorous testing: of the software, of the benchmark pipeline, and of safe
 - **Secrets:** tests assert credentials are never passed to agents or sandboxes.
 - **Idempotency:** repeated ingestion does not duplicate records.
 
-## Current Coverage (PROM-001, PROM-002)
+## Current Coverage (PROM-001, PROM-002, PROM-003)
 
 - **GitHub client** (`apps/web/lib/github/client.test.ts`): success, pagination, empty result,
   401/auth failure, rate-limit response, 5xx, network failure, languages, header assertions.
@@ -37,6 +37,12 @@ demand rigorous testing: of the software, of the benchmark pipeline, and of safe
   and auth-error records. These are database-integration tests, skipped without `DATABASE_URL`.
 - **API authentication** (`route.test.ts`): unauthenticated sync is rejected; the user is derived
   from the session; safe error mapping; no secret leakage.
+- **README evidence** (`readme.test.ts`, `readme-sync.test.ts`): supported README retrieval,
+  404/missing handling, empty and Unicode content, deterministic SHA-256 hashing, bounded UTF-8-safe
+  truncation, idempotent unchanged/changed updates, fork/private eligibility, fetch failures, and
+  rate-limit status handling.
+- **README API access**: unauthenticated requests and malformed identifiers are rejected, and
+  repository evidence queries are scoped to the authenticated user's ownership.
 
 Frameworks: **Vitest** (web and database packages). Web tests use an injected `fetch` so no real
 GitHub calls occur.

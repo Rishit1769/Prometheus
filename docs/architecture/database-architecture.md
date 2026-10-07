@@ -1,8 +1,9 @@
 # Database Architecture
 
-> Status: **Implemented for identity and public repository evidence; future entities remain
+> Status: **Implemented for identity, public repository evidence, and README evidence; future entities remain
 > proposed.** Migrations: `packages/database/prisma/migrations/20261006233500_init_auth_identity`
-> and `20261007140112_github_repository_ingestion`.
+> , `20261007140112_github_repository_ingestion`, and
+> `20261007180236_add_repository_readme_evidence`.
 
 ## Problem
 
@@ -68,6 +69,17 @@ erDiagram
 - `GitHubRepositorySync` records each run with status and rate-limit information.
 
 Design rationale: [ADR-007](../decisions/ADR-007-github-repository-evidence.md).
+
+## Implemented README evidence model (PROM-003)
+
+`RepositoryReadmeEvidence` is a one-to-one current evidence record attached to `Repository`.
+It stores bounded normalized content, a SHA-256 hash of the complete normalized content, source
+metadata, and explicit retrieval status. Forks and defensively flagged private repositories are
+not eligible for this evidence stage.
+
+The 256 KiB persisted limit is a safety boundary for future model context. `contentBytes` and
+`contentHash` describe the complete normalized source even when `truncated` is true. This model
+does not create developer scores, historical version tables, or PROM-004 analysis records.
 
 ## Design — Future Entity Relationships
 

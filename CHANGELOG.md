@@ -9,6 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **PROM-003 — README evidence ingestion.** Authenticated developers can synchronize bounded,
+  normalized README evidence for their stored public, non-fork repositories.
+  - Current per-repository evidence records preserve source path, GitHub SHA, UTF-8 content,
+    byte size, SHA-256 hash, truncation, and explicit availability/failure status.
+  - Authenticated `POST /api/github/readmes/sync` and ownership-scoped README access are exposed
+    alongside the repository evidence page.
+  - README content is treated as untrusted evidence and is never interpreted or scored here.
+
 - **PROM-002 — Public GitHub repository ingestion.** Authenticated developers can synchronize
   their public GitHub repositories into PostgreSQL.
   - Prisma models `Repository`, `RepositoryLanguage`, and `GitHubRepositorySync`
@@ -26,6 +34,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `packages/database/package.json` `db:migrate` no longer hardcodes the initial migration name.
 - Root `ROADMAP.md`, `docs/02-roadmap.md`, and `docs/github/*` updated to reflect PROM-002.
+- README ingestion uses npm workspaces and does not alter existing repository synchronization.
 
 ### Notes
 

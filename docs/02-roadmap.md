@@ -4,7 +4,8 @@
 > The root [ROADMAP.md](../ROADMAP.md) provides the condensed view.
 
 Milestone identifiers also map to the project's issue codes: **PROM-001** = v0.2 (Foundation +
-GitHub OAuth) and **PROM-002** = v0.3 (Public Repository Ingestion).
+GitHub OAuth), **PROM-002** = v0.3 (Public Repository Ingestion), and **PROM-003** = v0.35
+(README Evidence Ingestion).
 
 Each milestone lists its outcome, the documents it will affect, and its exit criteria. A
 milestone is complete when code, tests, and documentation all exist (see
@@ -31,6 +32,15 @@ milestone is complete when code, tests, and documentation all exist (see
   [github/repository-ingestion.md](github/repository-ingestion.md).
 - **Exit criteria:** Paginated REST ingestion with rate-limit handling and idempotency — met.
 - **Docs:** [github/repository-ingestion.md](github/repository-ingestion.md), [architecture/data-flow.md](architecture/data-flow.md), [ADR-007](decisions/ADR-007-github-repository-evidence.md).
+
+## v0.35 — README Evidence Ingestion
+
+- **Outcome:** Store bounded, normalized, hashable README evidence for eligible stored public repositories.
+- **Status:** Implemented (PROM-003). See [github/readme-evidence.md](github/readme-evidence.md).
+- **Exit criteria:** Authenticated retrieval, explicit statuses, UTF-8-safe truncation, ownership-scoped access,
+  idempotent updates, and automated coverage — met.
+- **Docs:** [github/readme-evidence.md](github/readme-evidence.md),
+  [ADR-008](decisions/ADR-008-readme-evidence-ingestion.md).
 
 ## v0.4 — Developer Engineering Profile
 
