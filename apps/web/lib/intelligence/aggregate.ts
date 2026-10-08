@@ -42,6 +42,19 @@ export function aggregateRepositoryAnalyses(
     const score = Math.min(1, total / (1 + Math.max(0, contributions.length - 1) * 0.5));
     const confidence = signals.length === 0 ? 0 : signals.reduce((sum, signal) => sum + signal.confidence, 0) / signals.length;
     const evidenceReferences = signals.flatMap((signal) => signal.evidence).filter((reference, index, references) => references.findIndex((item) => JSON.stringify(item) === JSON.stringify(reference)) === index).slice(0, 20);
+    const supportingRepositories = analyses.flatMap((analysis) => {
+      const domainSignals = analysis.output.demonstratedDomains.filter((signal) => signal.domain === domain && signal.evidence.length > 0);
+      if (!domainSignals.length) return [];
+      return [{
+        repositoryId: analysis.repositoryId,
+        repositoryName: analysis.repositoryName,
+        technologies: analysis.output.detectedTechnologies.filter((technology) => technology.evidence.length > 0).map((technology) => technology.name).slice(0, 12),
+        evidenceReferences: domainSignals.flatMap((signal) => signal.evidence).filter((reference, index, references) => references.findIndex((item) => JSON.stringify(item) === JSON.stringify(reference)) === index).slice(0, 12),
+        explanation: domainSignals.map((signal) => signal.reasoningSummary).filter(Boolean).join(" "),
+      }];
+    });
+    const limitations = ["Repository evidence demonstrates documented signals; it does not prove implementation quality, authorship, seniority, or production reliability."];
+    if (!supportingRepositories.length) limitations.push("No validated repository evidence currently supports this domain.");
     return {
       domain,
       level: scoreToLevel(score),
@@ -49,7 +62,9 @@ export function aggregateRepositoryAnalyses(
       confidence: Number(confidence.toFixed(4)),
       repositoryCount: new Set(signals.map((signal) => signal.repositoryId)).size,
       evidenceReferences,
-      summary: signals.length === 0 ? "Insufficient repository evidence for this domain." : `Evidence from ${new Set(signals.map((signal) => signal.repositoryId)).size} analyzed repository${signals.length === 1 ? "" : "ies"}.`,
+      supportingRepositories,
+      limitations,
+      summary: signals.length === 0 ? "Insufficient validated repository evidence for this domain." : `${supportingRepositories.length} repository${supportingRepositories.length === 1 ? "" : "ies"} contain validated evidence for this domain.`,
     } satisfies DeveloperDomainIntelligence;
   });
   const strongestDomains = [...domains].filter((domain) => domain.level > 0).sort((a, b) => b.evidenceScore - a.evidenceScore || a.domain.localeCompare(b.domain)).slice(0, 3).map((domain) => domain.domain);

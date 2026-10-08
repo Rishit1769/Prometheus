@@ -3,7 +3,8 @@ import { aggregateRepositoryAnalyses } from "./aggregate";
 import { sha256 } from "./hash";
 import { createConfiguredIntelligenceModel } from "./model";
 import { DeveloperAnalysisFailure, diagnosticForError, formatDiagnostic, type IntelligenceDiagnostic } from "./errors";
-import { DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION, type DeveloperSummaryInput, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
+import { DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, EVIDENCE_VALIDATION_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
+import { validateEvidenceReferences, validateRepositoryAnalysisOutput } from "./validate";
 
 type DatabaseClient = typeof prisma;
 const MAX_CONCURRENCY = 3;
@@ -63,11 +64,19 @@ async function runBounded<T>(items: T[], worker: (item: T) => Promise<void>): Pr
   await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENCY, items.length) }, consume));
 }
 
-function fallbackSummary(input: DeveloperSummaryInput): { profileSummary: string; limitations: string[] } {
-  const domains = input.domains.filter((domain) => domain.level > 0).slice(0, 3).map((domain) => domain.domain.toLowerCase().replace("_", "/")).join(", ");
+function deterministicSummary(aggregate: ReturnType<typeof aggregateRepositoryAnalyses>, coverage: number): { profileSummary: string; limitations: string[] } {
+  const domains = aggregate.domains.filter((domain) => domain.level > 0).sort((a, b) => b.evidenceScore - a.evidenceScore).slice(0, 3).map((domain) => domain.domain.toLowerCase().replace("_", "/"));
+  const technologies = aggregate.strongestTechnologies.slice(0, 4);
+  const lowEvidence = aggregate.domains.filter((domain) => domain.repositoryCount > 0 && domain.repositoryCount <= 2).map((domain) => domain.domain.toLowerCase().replace("_", "/"));
+  const parts = [
+    domains.length ? `Available public repository evidence indicates recurring signals across ${domains.join(", ")}.` : "Available public repository evidence is insufficient for a domain summary.",
+    technologies.length ? `Repeatedly observed technologies include ${technologies.join(", ")}.` : null,
+    lowEvidence.length ? `Fewer supporting repositories are available for ${lowEvidence.join(", ")}.` : null,
+    `Analysis coverage is ${Math.round(coverage * 100)}%.`,
+  ].filter(Boolean);
   return {
-    profileSummary: domains ? `Available repository evidence indicates demonstrated signals in ${domains}.` : "Available repository evidence is insufficient for a capability summary.",
-    limitations: ["Developer summary fallback used because the summary model response was unavailable."],
+    profileSummary: parts.join(" "),
+    limitations: aggregate.limitations,
   };
 }
 
@@ -91,19 +100,34 @@ async function runDeveloperAnalysis(
   let modelRequests = 0;
   let firstFailure: IntelligenceDiagnostic | undefined;
   const outputs: { repositoryId: string; repositoryName: string; output: RepositoryAnalysisOutput }[] = [];
-  const work = repositories.map((repository) => ({ repository, input: repositoryInput(repository), evidenceHash: sha256({ promptVersion: REPOSITORY_PROMPT_VERSION, schemaVersion: REPOSITORY_SCHEMA_VERSION, provider: model.provider, modelName: model.modelName, input: repositoryInput(repository) }) }));
+  const work = repositories.map((repository) => {
+    const input = repositoryInput(repository);
+    return { repository, input, legacyEvidenceHash: sha256({ promptVersion: REPOSITORY_PROMPT_VERSION, schemaVersion: REPOSITORY_SCHEMA_VERSION, provider: model.provider, modelName: model.modelName, input }), evidenceHash: sha256({ promptVersion: REPOSITORY_PROMPT_VERSION, schemaVersion: REPOSITORY_SCHEMA_VERSION, validationVersion: EVIDENCE_VALIDATION_VERSION, provider: model.provider, modelName: model.modelName, input }) };
+  });
 
-  await runBounded(work, async ({ repository, input, evidenceHash }) => {
-    if (repository.analysis?.status === "COMPLETE" && repository.analysis.evidenceHash === evidenceHash && repository.analysis.output) {
-      outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output: repository.analysis.output as unknown as RepositoryAnalysisOutput });
-      reused += 1;
-      return;
+  await runBounded(work, async ({ repository, input, legacyEvidenceHash, evidenceHash }) => {
+    const currentCache = repository.analysis?.status === "COMPLETE" && repository.analysis.evidenceHash === evidenceHash;
+    const legacyCache = repository.analysis?.status === "COMPLETE" && repository.analysis.evidenceHash === legacyEvidenceHash;
+    if ((currentCache || legacyCache) && repository.analysis?.output) {
+      let cachedOutput: RepositoryAnalysisOutput;
+      try {
+        cachedOutput = validateRepositoryAnalysisOutput(repository.analysis.output);
+        const grounded = validateEvidenceReferences(cachedOutput, input).output;
+        if (repository.analysis.validationVersion !== EVIDENCE_VALIDATION_VERSION) {
+          await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { evidenceHash, output: JSON.parse(JSON.stringify(grounded)), validationVersion: EVIDENCE_VALIDATION_VERSION, status: "COMPLETE", analyzedAt: repository.analysis.analyzedAt ?? new Date(), errorMessage: null } });
+        }
+        outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output: grounded });
+        reused += 1;
+        return;
+      } catch {
+        await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "STALE", validationVersion: EVIDENCE_VALIDATION_VERSION, errorMessage: "Cached analysis failed current evidence validation." } });
+      }
     }
     try {
-      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "RUNNING", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName }, update: { status: "RUNNING", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage: null } });
+      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "RUNNING", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName }, update: { status: "RUNNING", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage: null } });
       modelRequests += 1;
       const output = await model.analyzeRepository(input);
-      await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "COMPLETE", output: JSON.parse(JSON.stringify(output)), analyzedAt: new Date(), errorMessage: null } });
+      await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "COMPLETE", validationVersion: EVIDENCE_VALIDATION_VERSION, output: JSON.parse(JSON.stringify(output)), analyzedAt: new Date(), errorMessage: null } });
       outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output });
       analyzed += 1;
     } catch (error) {
@@ -111,7 +135,7 @@ async function runDeveloperAnalysis(
       const diagnostic = diagnosticForError(error, "persistence");
       firstFailure ??= diagnostic;
       const errorMessage = formatDiagnostic(diagnostic);
-      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "FAILED", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage }, update: { status: "FAILED", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage } });
+      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "FAILED", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage }, update: { status: "FAILED", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage } });
     }
   });
 
@@ -150,18 +174,13 @@ async function runDeveloperAnalysis(
     }
     return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length, status: "COMPLETE", modelRequests };
   }
-  const summaryInput: DeveloperSummaryInput = { domains: aggregate.domains.map(({ domain, level, evidenceScore, confidence, repositoryCount }) => ({ domain, level, evidenceScore, confidence, repositoryCount })), technologies: aggregate.strongestTechnologies.map((name) => ({ name, repositoryCount: outputs.filter((item) => item.output.detectedTechnologies.some((technology) => technology.name === name)).length })), limitations: aggregate.limitations };
-  let summary = fallbackSummary(summaryInput);
-  let summaryFailure: IntelligenceDiagnostic | undefined;
-  try { modelRequests += 1; summary = await model.summarizeDeveloper(summaryInput); } catch (error) {
-    summaryFailure = diagnosticForError(error, "summary");
-  }
-  const output = { ...aggregate, limitations: [...aggregate.limitations, ...summary.limitations] };
   const coverage = repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length;
+  const summary = deterministicSummary(aggregate, coverage);
+  const output = { ...aggregate, limitations: [...aggregate.limitations, ...summary.limitations] };
   const jsonOutput = JSON.parse(JSON.stringify(output));
-  const status = failed || summaryFailure ? "PARTIAL" : "COMPLETE";
+  const status = failed ? "PARTIAL" : "COMPLETE";
   await db.developerIntelligence.upsert({ where: { userId }, create: { userId, status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput }, update: { status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput, generatedAt: new Date() } });
-  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status, modelRequests, ...(firstFailure ?? summaryFailure ? { diagnostics: firstFailure ?? summaryFailure } : {}) };
+  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status, modelRequests, ...(firstFailure ? { diagnostics: firstFailure } : {}) };
 }
 
 export function analyzeDeveloper(userId: string, dependencies: { db?: DatabaseClient; model?: IntelligenceModel | null } = {}): Promise<DeveloperAnalysisResult> {

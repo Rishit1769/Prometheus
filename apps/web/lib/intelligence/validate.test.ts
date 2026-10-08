@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groundRepositoryAnalysisOutput, validateRepositoryAnalysisOutput } from "./validate";
+import { groundRepositoryAnalysisOutput, validateEvidenceReferences, validateRepositoryAnalysisOutput } from "./validate";
 import type { RepositoryAnalysisInput } from "./types";
 
 const valid = {
@@ -26,6 +26,38 @@ describe("repository analysis validation", () => {
     expect(grounded.detectedTechnologies).toEqual([]);
     expect(grounded.demonstratedDomains).toEqual([]);
     expect(grounded.evidenceReferences).toEqual([]);
+  });
+
+  it("grounds languages, topics, headings, excerpts, and descriptions with harmless normalization", () => {
+    const input: RepositoryAnalysisInput = { repository: { id: "r", name: "repo", description: "A service", languages: [{ name: "TypeScript", bytes: 10 }], topics: ["machine-learning"], isFork: false, isArchived: false, updatedAt: null }, readme: { status: "AVAILABLE", content: "# Architecture\nUses PostgreSQL for storage.", contentHash: "hash", truncated: false } };
+    const grounded = validateEvidenceReferences(validateRepositoryAnalysisOutput({ ...valid, evidenceReferences: [
+      { type: "LANGUAGE", reference: "typescript" },
+      { type: "TOPIC", reference: "Machine-Learning" },
+      { type: "README_SECTION", reference: "README.md#architecture" },
+      { type: "README_CONTENT", reference: "Uses PostgreSQL for storage." },
+      { type: "REPOSITORY_DESCRIPTION", reference: "description" },
+    ] }), input);
+    expect(grounded.invalidReferences).toHaveLength(0);
+    expect(grounded.output.evidenceReferences).toHaveLength(5);
+  });
+
+  it("rejects invented excerpts, headings, and references from another repository", () => {
+    const input: RepositoryAnalysisInput = { repository: { id: "r", name: "repo", description: "A service", languages: [{ name: "TypeScript", bytes: 10 }], topics: ["api"], isFork: false, isArchived: false, updatedAt: null }, readme: { status: "TRUNCATED", content: "# Architecture\nActual text", contentHash: "hash", truncated: true } };
+    const grounded = validateEvidenceReferences(validateRepositoryAnalysisOutput({ ...valid, evidenceReferences: [
+      { type: "README_SECTION", reference: "Invented section" },
+      { type: "README_CONTENT", reference: "A quote from another repository" },
+      { type: "LANGUAGE", reference: "Rust" },
+    ] }), input);
+    expect(grounded.invalidReferences).toHaveLength(3);
+    expect(grounded.output.evidenceReferences).toEqual([]);
+    expect(grounded.output.limitations.at(-1)).toContain("unsupported evidence");
+  });
+
+  it("does not validate README references when README evidence is missing", () => {
+    const input: RepositoryAnalysisInput = { repository: { id: "r", name: "repo", description: null, languages: [], topics: [], isFork: false, isArchived: false, updatedAt: null }, readme: { status: "MISSING", content: null, contentHash: null, truncated: false } };
+    const grounded = validateEvidenceReferences(validateRepositoryAnalysisOutput({ ...valid, detectedTechnologies: [], demonstratedDomains: [], evidenceReferences: [{ type: "README_CONTENT", reference: "README.md" }] }), input);
+    expect(grounded.invalidReferences).toHaveLength(1);
+    expect(grounded.output.evidenceReferences).toEqual([]);
   });
 
   it.each([

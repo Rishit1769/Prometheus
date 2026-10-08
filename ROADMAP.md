@@ -1,6 +1,8 @@
 # PROMETHEUS Roadmap
 
-> Status: **Active.** The repository now contains a working web/database foundation and GitHub
+> Status: **Active.** PROM-004C hardening is implemented on the PROM-004 feature branch; live
+> provider acceptance remains dependent on the configured OpenCode Go credential and environment.
+> The repository now contains a working web/database foundation and GitHub
 > authentication and public-repository ingestion. This roadmap may be adjusted as implementation
 > proceeds and as repository state changes. The detailed phase descriptions live in
 > [docs/02-roadmap.md](docs/02-roadmap.md).

@@ -185,6 +185,7 @@ model RepositoryAnalysis {
   repositoryId    String                  @unique
   status          RepositoryAnalysisStatus @default(PENDING)
   evidenceHash    String
+  validationVersion String                  @default("unknown")
   promptVersion   String
   modelProvider   String
   modelName       String

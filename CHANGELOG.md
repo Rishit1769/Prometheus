@@ -9,6 +9,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **PROM-004C hardening.** Evidence references are grounded against stored repository evidence,
+  cached analyses carry a validation identity, and domain details are explainable from validated
+  supporting repositories without an extra summary model call.
+
 - **PROM-004 — Developer Intelligence V0.** Repository evidence can be independently analyzed
   through a validated model boundary and aggregated deterministically into an eight-domain
   capability vector. README content remains untrusted evidence; no universal developer score is

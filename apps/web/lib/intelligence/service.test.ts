@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { analyzeDeveloper } from "./service";
 import { DeveloperAnalysisFailure, IntelligenceError } from "./errors";
 import type { IntelligenceModel, RepositoryAnalysisOutput } from "./types";
+import { EVIDENCE_VALIDATION_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION } from "./types";
+import { sha256 } from "./hash";
 
 const analysisOutput: RepositoryAnalysisOutput = {
   summary: "A documented backend service.", detectedTechnologies: [{ name: "TypeScript", evidence: [{ type: "LANGUAGE", reference: "TypeScript" }] }], demonstratedDomains: [{ domain: "BACKEND", strength: 0.8, confidence: 0.9, evidence: [{ type: "LANGUAGE", reference: "TypeScript" }], reasoningSummary: "Server evidence." }], projectComplexity: "MODERATE", documentationQuality: "GOOD", architectureSignals: [], engineeringSignals: [], limitations: [], confidence: 0.8, evidenceReferences: [],
@@ -35,7 +37,7 @@ describe("developer analysis orchestration", () => {
     const second = await analyzeDeveloper("user-1", { db: db as never, model: secondModel });
     expect(first.developerProfileGenerated).toBe(true);
     expect(first.repositoriesAnalyzed).toBe(1);
-    expect(first.modelRequests).toBe(2);
+    expect(first.modelRequests).toBe(1);
     expect(second.repositoriesReused).toBe(1);
     expect(second.repositoriesAnalyzed).toBe(0);
     expect(second.developerProfileReused).toBe(true);
@@ -113,6 +115,23 @@ describe("developer analysis orchestration", () => {
     expect(developerIntelligence.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ status: "PARTIAL", coverage: 0.5, analyzedRepositories: 1 }),
     }));
+  });
+
+  it("revalidates a legacy cached analysis without another model call", async () => {
+    const repository = { id: "legacy-1", name: "legacy", description: "service", topics: [], isFork: false, isPrivate: false, isArchived: false, githubUpdatedAt: null, languages: [{ language: "TypeScript", bytes: 10 }], readmeEvidence: { status: "AVAILABLE", content: "# API", contentHash: "h1", truncated: false } };
+    const input = { repository: { id: repository.id, name: repository.name, description: repository.description, languages: [{ name: "TypeScript", bytes: 10 }], topics: [], isFork: false, isArchived: false, updatedAt: null }, readme: repository.readmeEvidence };
+    const legacyHash = sha256({ promptVersion: REPOSITORY_PROMPT_VERSION, schemaVersion: REPOSITORY_SCHEMA_VERSION, provider: "mock", modelName: "mock-v1", input });
+    const analysis = { status: "COMPLETE", evidenceHash: legacyHash, validationVersion: "unknown", analyzedAt: new Date("2026-01-01T00:00:00Z"), output: analysisOutput };
+    const update = vi.fn().mockResolvedValue(analysis);
+    const db = {
+      repository: { findMany: vi.fn().mockResolvedValue([{ ...repository, analysis }]) },
+      repositoryAnalysis: { update, upsert: vi.fn() },
+      developerIntelligence: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    };
+    const result = await analyzeDeveloper("legacy-user", { db: db as never, model: model() });
+    expect(result.repositoriesReused).toBe(1);
+    expect(result.modelRequests).toBe(0);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ validationVersion: EVIDENCE_VALIDATION_VERSION }) }));
   });
 
   it("does not cache an empty no-repository result as a zero-coverage profile", async () => {

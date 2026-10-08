@@ -12,6 +12,17 @@ const COMPLEXITIES = ["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "ADVANCED"] as
 const DOCUMENTATION = ["LIMITED", "BASIC", "GOOD", "STRONG"] as const;
 const REFERENCE_TYPES = ["REPOSITORY_DESCRIPTION", "LANGUAGE", "TOPIC", "README_SECTION", "README_CONTENT"] as const;
 
+export interface EvidenceValidationIssue {
+  path: string;
+  reference: EvidenceReference;
+  reason: string;
+}
+
+export interface EvidenceValidationResult {
+  output: RepositoryAnalysisOutput;
+  invalidReferences: EvidenceValidationIssue[];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -108,26 +119,50 @@ function headingSlug(value: string): string {
   return value.toLowerCase().trim().replace(/[`*_]/g, "").replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-");
 }
 
-/** Remove model references that do not point to the supplied evidence payload. */
-export function groundRepositoryAnalysisOutput(output: RepositoryAnalysisOutput, input: RepositoryAnalysisInput): RepositoryAnalysisOutput {
+function normalizeLanguage(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+function normalizeTopic(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+/** Validate every model reference against the repository evidence actually supplied to the model. */
+export function validateEvidenceReferences(output: RepositoryAnalysisOutput, input: RepositoryAnalysisInput): EvidenceValidationResult {
   const headings = new Set<string>();
   for (const match of input.readme.content?.matchAll(/^#{1,6}\s+(.+)$/gm) ?? []) {
     const heading = match[1].trim();
     headings.add(heading);
     headings.add(`README.md#${headingSlug(heading)}`);
   }
-  const validReference = (reference: EvidenceReference): boolean => {
-    if (reference.type === "REPOSITORY_DESCRIPTION") return Boolean(input.repository.description) && ["description", "repository.description"].includes(reference.reference);
-    if (reference.type === "LANGUAGE") return input.repository.languages.some((language) => language.name === reference.reference);
-    if (reference.type === "TOPIC") return input.repository.topics.includes(reference.reference);
-    if (reference.type === "README_SECTION") return headings.has(reference.reference);
-    return Boolean(input.readme.content) && ["README.md", "README_CONTENT", input.readme.contentHash].includes(reference.reference);
+  const invalidReferences: EvidenceValidationIssue[] = [];
+  const validReference = (reference: EvidenceReference, path: string): boolean => {
+    let valid = false;
+    if (reference.type === "REPOSITORY_DESCRIPTION") valid = Boolean(input.repository.description) && ["description", "repository.description"].includes(reference.reference);
+    else if (reference.type === "LANGUAGE") valid = input.repository.languages.some((language) => normalizeLanguage(language.name) === normalizeLanguage(reference.reference));
+    else if (reference.type === "TOPIC") valid = input.repository.topics.some((topic) => normalizeTopic(topic) === normalizeTopic(reference.reference));
+    else if (reference.type === "README_SECTION") valid = headings.has(reference.reference) || headings.has(`README.md#${headingSlug(reference.reference)}`);
+    else if (input.readme.content) {
+      const locator = ["README.md", "README_CONTENT", input.readme.contentHash].includes(reference.reference);
+      const excerpt = input.readme.content.includes(reference.reference);
+      valid = locator || excerpt;
+      if (reference.excerptHash && reference.excerptHash !== input.readme.contentHash) valid = false;
+    }
+    if (!valid) invalidReferences.push({ path, reference, reason: "Reference does not resolve to stored repository evidence." });
+    return valid;
   };
-  const ground = (references: EvidenceReference[]) => references.filter(validReference);
-  return {
+  const ground = (references: EvidenceReference[], path: string) => references.filter((reference, index) => validReference(reference, `${path}[${index}]`));
+  const grounded: RepositoryAnalysisOutput = {
     ...output,
-    detectedTechnologies: output.detectedTechnologies.map((technology) => ({ ...technology, evidence: ground(technology.evidence) })).filter((technology) => technology.evidence.length > 0),
-    demonstratedDomains: output.demonstratedDomains.map((domain) => ({ ...domain, evidence: ground(domain.evidence) })).filter((domain) => domain.evidence.length > 0),
-    evidenceReferences: ground(output.evidenceReferences),
+    detectedTechnologies: output.detectedTechnologies.map((technology, index) => ({ ...technology, evidence: ground(technology.evidence, `detectedTechnologies[${index}].evidence`) })).filter((technology) => technology.evidence.length > 0),
+    demonstratedDomains: output.demonstratedDomains.map((domain, index) => ({ ...domain, evidence: ground(domain.evidence, `demonstratedDomains[${index}].evidence`) })).filter((domain) => domain.evidence.length > 0),
+    evidenceReferences: ground(output.evidenceReferences, "evidenceReferences"),
   };
+  if (invalidReferences.length) grounded.limitations = [...grounded.limitations, `Removed ${invalidReferences.length} unsupported evidence reference${invalidReferences.length === 1 ? "" : "s"}.`];
+  return { output: grounded, invalidReferences };
+}
+
+/** Sanitize model output while retaining only references that resolve to stored evidence. */
+export function groundRepositoryAnalysisOutput(output: RepositoryAnalysisOutput, input: RepositoryAnalysisInput): RepositoryAnalysisOutput {
+  return validateEvidenceReferences(output, input).output;
 }

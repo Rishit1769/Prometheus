@@ -26,3 +26,19 @@ multi-instance job coordination is intentionally outside V0.
 The profile contains eight domains: FRONTEND, BACKEND, DATABASE, AI_ML, DEVOPS, TESTING, SYSTEMS,
 and MOBILE. Level 0 means insufficient evidence, not poor ability. There is intentionally no
 universal developer score.
+
+Each domain retains explainability details derived from validated repository analyses: supporting
+repository IDs and names, detected technologies with evidence, source reference types, concise
+repository explanations, evidence scores, confidence, and limitations. The `/developer` page uses
+native expand/collapse controls and renders README-derived values as escaped text. No raw README
+HTML or hidden model reasoning is exposed.
+
+The profile summary is deterministic. It names the strongest evidenced domains, recurring
+technologies, low-coverage areas, and coverage percentage, followed by evidence limitations. This
+avoids an extra model request solely to rewrite the aggregation.
+
+PROM-004C automated acceptance passes. A controlled OpenCode Go request reached the provider, but
+DeepSeek V4.1 Flash returned HTTP 400 because the OpenCode workspace is not configured for the
+required Global privacy region. Full application-level live verification is therefore pending that
+external workspace setting and a reachable PostgreSQL session; no credential or provider payload is
+recorded here.
