@@ -9,9 +9,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- **PROM-004C hardening.** Evidence references are grounded against stored repository evidence,
-  cached analyses carry a validation identity, and domain details are explainable from validated
-  supporting repositories without an extra summary model call.
+- **PROM-004C verified compatibility.** Persisted developer output now carries schema version
+  `developer-intelligence-output-v3`. Legacy profile JSON is safely normalized and rebuilt from
+  validated per-repository analyses; legacy profiles are not treated as modern cache hits. Cache
+  results distinguish reuse, revalidation, invalidation, and regeneration. The existing
+  32-repository legacy profile was upgraded from cached analyses with 32 reused and zero model
+  requests. Live `/developer`
+  verification rendered real repository attribution and grounded 197 displayed references with
+  zero unsupported references; the unchanged follow-up run made zero model requests.
 
 - **PROM-004 — Developer Intelligence V0.** Repository evidence can be independently analyzed
   through a validated model boundary and aggregated deterministically into an eight-domain

@@ -33,12 +33,24 @@ repository explanations, evidence scores, confidence, and limitations. The `/dev
 native expand/collapse controls and renders README-derived values as escaped text. No raw README
 HTML or hidden model reasoning is exposed.
 
+Persisted profile JSON carries `schemaVersion` (`developer-intelligence-output-v3`). Older profiles
+are marked `legacy` at the read boundary. They are not treated as modern explainability-cache hits;
+the next analysis rebuilds the developer aggregate from validated, cached repository analyses
+without unnecessary model calls. If repository-level attribution is absent, the UI explicitly says
+that detailed attribution is unavailable instead of claiming there is no evidence.
+
+Cache diagnostics distinguish exact reuse, legacy revalidation, invalidation, and regeneration.
+Evidence changes (including README hashes), changes to eligible repository membership, failed
+analyses that later succeed, and output-schema changes all prevent stale developer aggregates from
+being treated as current.
+
 The profile summary is deterministic. It names the strongest evidenced domains, recurring
 technologies, low-coverage areas, and coverage percentage, followed by evidence limitations. This
 avoids an extra model request solely to rewrite the aggregation.
 
-PROM-004C automated acceptance passes. A controlled OpenCode Go request reached the provider, but
-DeepSeek V4.1 Flash returned HTTP 400 because the OpenCode workspace is not configured for the
-required Global privacy region. Full application-level live verification is therefore pending that
-external workspace setting and a reachable PostgreSQL session; no credential or provider payload is
-recorded here.
+PROM-004C was verified against the live PostgreSQL profile and `/developer` route. The legacy output
+was rebuilt from 32 already-validated repository analyses: 32 reused, 0 model requests, 0 invalidated,
+and 0 regenerated repository analyses. An unchanged second run reused all 32 analyses and the
+developer profile with 0 model requests. The live page rendered repository evidence without an
+exception; 197 displayed evidence references were checked against the validated per-repository
+source outputs with 0 unsupported references.

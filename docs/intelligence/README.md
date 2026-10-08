@@ -11,5 +11,9 @@ reliability.
 Each repository is analyzed independently. The developer profile is then calculated from validated
 repository signals; the model does not assign the final developer levels.
 
+The persisted developer output uses schema version `developer-intelligence-output-v3`. Profiles
+from older output schemas are marked legacy, and are rebuilt from validated repository-analysis
+records before being presented with repository-level attribution.
+
 See [Repository Analysis](repository-analysis.md), [Developer Intelligence](developer-intelligence.md),
 and [Domain Scoring](domain-scoring.md).
