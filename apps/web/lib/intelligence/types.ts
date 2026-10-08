@@ -15,6 +15,7 @@ export type ProjectComplexity = "TRIVIAL" | "SIMPLE" | "MODERATE" | "COMPLEX" | 
 export type DocumentationQuality = "LIMITED" | "BASIC" | "GOOD" | "STRONG";
 
 export const REPOSITORY_PROMPT_VERSION = "repository-analysis-v1";
+export const REPOSITORY_SCHEMA_VERSION = "repository-analysis-schema-v1";
 export const DEVELOPER_PROMPT_VERSION = "developer-aggregation-v1";
 export const DOMAIN_SCORING_VERSION = "domain-score-v1";
 export const MODEL_PROVIDER = "openai";

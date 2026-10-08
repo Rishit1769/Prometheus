@@ -28,8 +28,10 @@ describe("developer analysis orchestration", () => {
     const second = await analyzeDeveloper("user-1", { db: db as never, model: secondModel });
     expect(first.developerProfileGenerated).toBe(true);
     expect(first.repositoriesAnalyzed).toBe(1);
+    expect(first.modelRequests).toBe(2);
     expect(second.repositoriesReused).toBe(1);
     expect(second.developerProfileReused).toBe(true);
+    expect(second.modelRequests).toBe(0);
     expect(secondModel.analyzeRepository).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ import {
   type DeveloperSummaryOutput,
   type EvidenceReference,
   type RepositoryAnalysisOutput,
+  type RepositoryAnalysisInput,
   type IntelligenceDomain,
 } from "./types";
 
@@ -82,5 +83,33 @@ export function validateDeveloperSummaryOutput(value: unknown): DeveloperSummary
   return {
     profileSummary: boundedString(value.profileSummary, "profile summary", 2000),
     limitations: boundedArray(value.limitations, "developer limitations", 20).map((item) => boundedString(item, "limitation", 300)),
+  };
+}
+
+function headingSlug(value: string): string {
+  return value.toLowerCase().trim().replace(/[`*_]/g, "").replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-");
+}
+
+/** Remove model references that do not point to the supplied evidence payload. */
+export function groundRepositoryAnalysisOutput(output: RepositoryAnalysisOutput, input: RepositoryAnalysisInput): RepositoryAnalysisOutput {
+  const headings = new Set<string>();
+  for (const match of input.readme.content?.matchAll(/^#{1,6}\s+(.+)$/gm) ?? []) {
+    const heading = match[1].trim();
+    headings.add(heading);
+    headings.add(`README.md#${headingSlug(heading)}`);
+  }
+  const validReference = (reference: EvidenceReference): boolean => {
+    if (reference.type === "REPOSITORY_DESCRIPTION") return Boolean(input.repository.description) && ["description", "repository.description"].includes(reference.reference);
+    if (reference.type === "LANGUAGE") return input.repository.languages.some((language) => language.name === reference.reference);
+    if (reference.type === "TOPIC") return input.repository.topics.includes(reference.reference);
+    if (reference.type === "README_SECTION") return headings.has(reference.reference);
+    return Boolean(input.readme.content) && ["README.md", "README_CONTENT", input.readme.contentHash].includes(reference.reference);
+  };
+  const ground = (references: EvidenceReference[]) => references.filter(validReference);
+  return {
+    ...output,
+    detectedTechnologies: output.detectedTechnologies.map((technology) => ({ ...technology, evidence: ground(technology.evidence) })).filter((technology) => technology.evidence.length > 0),
+    demonstratedDomains: output.demonstratedDomains.map((domain) => ({ ...domain, evidence: ground(domain.evidence) })).filter((domain) => domain.evidence.length > 0),
+    evidenceReferences: ground(output.evidenceReferences),
   };
 }

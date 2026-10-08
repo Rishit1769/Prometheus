@@ -1,7 +1,7 @@
 import { developerSummaryPrompt, DEVELOPER_SUMMARY_SYSTEM_PROMPT } from "./prompts/developer-aggregation-v1";
 import { repositoryAnalysisPrompt, REPOSITORY_ANALYSIS_SYSTEM_PROMPT } from "./prompts/repository-analysis-v1";
 import type { DeveloperSummaryInput, IntelligenceModel, RepositoryAnalysisInput } from "./types";
-import { validateDeveloperSummaryOutput, validateRepositoryAnalysisOutput } from "./validate";
+import { groundRepositoryAnalysisOutput, validateDeveloperSummaryOutput, validateRepositoryAnalysisOutput } from "./validate";
 
 type OpenAIResponse = { choices?: { message?: { content?: string | null } }[] };
 
@@ -28,11 +28,13 @@ export class OpenAIIntelligenceModel implements IntelligenceModel {
 
   private async complete(system: string, user: string): Promise<unknown> {
     const response = await this.fetchFn("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: this.modelName,
-        temperature: 0,
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify({
+          model: this.modelName,
+          temperature: 0,
+          max_tokens: 1800,
         response_format: { type: "json_object" },
         messages: [{ role: "system", content: system }, { role: "user", content: user }],
       }),
@@ -43,7 +45,7 @@ export class OpenAIIntelligenceModel implements IntelligenceModel {
   }
 
   async analyzeRepository(input: RepositoryAnalysisInput) {
-    return validateRepositoryAnalysisOutput(await this.complete(REPOSITORY_ANALYSIS_SYSTEM_PROMPT, repositoryAnalysisPrompt(input)));
+    return groundRepositoryAnalysisOutput(validateRepositoryAnalysisOutput(await this.complete(REPOSITORY_ANALYSIS_SYSTEM_PROMPT, repositoryAnalysisPrompt(input))), input);
   }
 
   async summarizeDeveloper(input: DeveloperSummaryInput) {

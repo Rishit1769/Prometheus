@@ -35,6 +35,12 @@ PROM-002 (repository ingestion) requires only `DATABASE_URL` and the `AUTH_*` va
 the OAuth access token stored on the user's GitHub `Account` row — no additional token is
 configured. `GITHUB_TOKEN` is **not** used by PROM-002.
 
+PROM-004 uses an existing server-side OpenAI-compatible configuration when present:
+`AI_PROVIDER=openai`, `AI_MODEL` (or `OPENAI_MODEL`), and `AI_API_KEY` (or `OPENAI_API_KEY`).
+The implementation calls `https://api.openai.com/v1/chat/completions` with JSON mode. The API key
+is never sent to the browser, stored in the database, or logged. If no key is configured, the
+analysis route returns `AI_NOT_CONFIGURED` and no model call is attempted.
+
 See [.env.example](../../.env.example) for the full annotated list.
 
 ## Security Notes

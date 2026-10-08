@@ -2,7 +2,7 @@ import { prisma } from "@prometheus/database";
 import { aggregateRepositoryAnalyses } from "./aggregate";
 import { sha256 } from "./hash";
 import { createConfiguredIntelligenceModel } from "./model";
-import { DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, REPOSITORY_PROMPT_VERSION, type DeveloperSummaryInput, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
+import { DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION, type DeveloperSummaryInput, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
 
 type DatabaseClient = typeof prisma;
 const MAX_CONCURRENCY = 3;
@@ -16,6 +16,7 @@ export interface DeveloperAnalysisResult {
   developerProfileReused: boolean;
   coverage: number;
   status: "COMPLETE" | "PARTIAL" | "FAILED";
+  modelRequests: number;
 }
 
 function repositoryInput(repository: {
@@ -68,7 +69,9 @@ function fallbackSummary(input: DeveloperSummaryInput): { profileSummary: string
   };
 }
 
-export async function analyzeDeveloper(
+const activeAnalyses = new Map<string, Promise<DeveloperAnalysisResult>>();
+
+async function runDeveloperAnalysis(
   userId: string,
   dependencies: { db?: DatabaseClient; model?: IntelligenceModel | null } = {},
 ): Promise<DeveloperAnalysisResult> {
@@ -83,8 +86,9 @@ export async function analyzeDeveloper(
   let analyzed = 0;
   let reused = 0;
   let failed = 0;
+  let modelRequests = 0;
   const outputs: { repositoryId: string; repositoryName: string; output: RepositoryAnalysisOutput }[] = [];
-  const work = repositories.map((repository) => ({ repository, input: repositoryInput(repository), evidenceHash: sha256({ version: REPOSITORY_PROMPT_VERSION, input: repositoryInput(repository) }) }));
+  const work = repositories.map((repository) => ({ repository, input: repositoryInput(repository), evidenceHash: sha256({ promptVersion: REPOSITORY_PROMPT_VERSION, schemaVersion: REPOSITORY_SCHEMA_VERSION, provider: model.provider, modelName: model.modelName, input: repositoryInput(repository) }) }));
 
   await runBounded(work, async ({ repository, input, evidenceHash }) => {
     if (repository.analysis?.status === "COMPLETE" && repository.analysis.evidenceHash === evidenceHash && repository.analysis.output) {
@@ -94,6 +98,7 @@ export async function analyzeDeveloper(
     }
     try {
       await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "RUNNING", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName }, update: { status: "RUNNING", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage: null } });
+      modelRequests += 1;
       const output = await model.analyzeRepository(input);
       await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "COMPLETE", output: JSON.parse(JSON.stringify(output)), analyzedAt: new Date(), errorMessage: null } });
       outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output });
@@ -105,17 +110,25 @@ export async function analyzeDeveloper(
   });
 
   const aggregate = aggregateRepositoryAnalyses(outputs);
-  const profileEvidenceHash = sha256({ version: DOMAIN_SCORING_VERSION, analyses: outputs.map((item) => ({ repositoryId: item.repositoryId, evidenceHash: work.find((candidate) => candidate.repository.id === item.repositoryId)?.evidenceHash })).sort((a, b) => a.repositoryId.localeCompare(b.repositoryId)) });
+  const profileEvidenceHash = sha256({ scoringVersion: DOMAIN_SCORING_VERSION, promptVersion: DEVELOPER_PROMPT_VERSION, provider: model.provider, modelName: model.modelName, eligibleRepositories: work.map((item) => ({ repositoryId: item.repository.id, evidenceHash: item.evidenceHash, state: outputs.some((output) => output.repositoryId === item.repository.id) ? "COMPLETE" : "FAILED" })).sort((a, b) => a.repositoryId.localeCompare(b.repositoryId)) });
   const existingProfile = await db.developerIntelligence.findUnique({ where: { userId } });
   if (existingProfile?.status === "COMPLETE" && existingProfile.evidenceHash === profileEvidenceHash) {
-    return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed + reused, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length, status: failed ? "PARTIAL" : "COMPLETE" };
+    return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed + reused, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length, status: "COMPLETE", modelRequests };
   }
   const summaryInput: DeveloperSummaryInput = { domains: aggregate.domains.map(({ domain, level, evidenceScore, confidence, repositoryCount }) => ({ domain, level, evidenceScore, confidence, repositoryCount })), technologies: aggregate.strongestTechnologies.map((name) => ({ name, repositoryCount: outputs.filter((item) => item.output.detectedTechnologies.some((technology) => technology.name === name)).length })), limitations: aggregate.limitations };
   let summary = fallbackSummary(summaryInput);
-  try { summary = await model.summarizeDeveloper(summaryInput); } catch { /* deterministic fallback remains safe and evidence-limited */ }
+  try { modelRequests += 1; summary = await model.summarizeDeveloper(summaryInput); } catch { /* deterministic fallback remains safe and evidence-limited */ }
   const output = { ...aggregate, limitations: [...aggregate.limitations, ...summary.limitations] };
   const coverage = repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length;
   const jsonOutput = JSON.parse(JSON.stringify(output));
   await db.developerIntelligence.upsert({ where: { userId }, create: { userId, status: failed ? "PARTIAL" : "COMPLETE", evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.length === 0 ? 0 : outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: analyzed + reused, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput }, update: { status: failed ? "PARTIAL" : "COMPLETE", evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.length === 0 ? 0 : outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: analyzed + reused, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput } });
-  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed + reused, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status: failed ? "PARTIAL" : "COMPLETE" };
+  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed + reused, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status: failed ? "PARTIAL" : "COMPLETE", modelRequests };
+}
+
+export function analyzeDeveloper(userId: string, dependencies: { db?: DatabaseClient; model?: IntelligenceModel | null } = {}): Promise<DeveloperAnalysisResult> {
+  const active = activeAnalyses.get(userId);
+  if (active) return active;
+  const promise = runDeveloperAnalysis(userId, dependencies).finally(() => activeAnalyses.delete(userId));
+  activeAnalyses.set(userId, promise);
+  return promise;
 }
