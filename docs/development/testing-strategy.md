@@ -1,6 +1,6 @@
 # Testing Strategy
 
-> Status: **Proposed.** No tests exist yet.
+> Status: **Implemented for the web/database foundation; expanding with future milestones.**
 
 ## Problem
 
@@ -25,6 +25,31 @@ demand rigorous testing: of the software, of the benchmark pipeline, and of safe
 - **Isolation:** untrusted code cannot access host filesystem, network, or credentials.
 - **Secrets:** tests assert credentials are never passed to agents or sandboxes.
 - **Idempotency:** repeated ingestion does not duplicate records.
+
+## Current Coverage (PROM-001, PROM-002, PROM-003)
+
+- **GitHub client** (`apps/web/lib/github/client.test.ts`): success, pagination, empty result,
+  401/auth failure, rate-limit response, 5xx, network failure, languages, header assertions.
+- **Normalization** (`normalize.test.ts`): field mapping, null description, fork/archived/template
+  metadata, empty repository, timestamps, language byte percentages, empty topics.
+- **Persistence & sync** (`sync.test.ts`): create, metadata update, duplicate prevention
+  (idempotency), language replacement, topics, ownership, partial language failure, rate-limit
+  and auth-error records. These are database-integration tests, skipped without `DATABASE_URL`.
+- **API authentication** (`route.test.ts`): unauthenticated sync is rejected; the user is derived
+  from the session; safe error mapping; no secret leakage.
+- **README evidence** (`readme.test.ts`, `readme-sync.test.ts`): supported README retrieval,
+  404/missing handling, empty and Unicode content, deterministic SHA-256 hashing, bounded UTF-8-safe
+  truncation, idempotent unchanged/changed updates, fork/private eligibility, fetch failures, and
+  rate-limit status handling.
+- **README API access**: unauthenticated requests and malformed identifiers are rejected, and
+  repository evidence queries are scoped to the authenticated user's ownership.
+- **Developer intelligence** (`apps/web/lib/intelligence/*.test.ts`): structured-output bounds,
+  prompt-injection-as-data behavior, deterministic evidence hashes, scoring thresholds, bounded
+  aggregation, provider isolation, repository reuse, profile reuse, and sanitized analysis API
+  errors. Tests use a mock model and do not require AI credentials.
+
+Frameworks: **Vitest** (web and database packages). Web tests use an injected `fetch` so no real
+GitHub calls occur.
 
 ## Definition of Done
 
@@ -52,3 +77,7 @@ Tests are required for a feature to be considered complete.
 - [Security Architecture](../architecture/security-architecture.md)
 - [Agent Adapter](../agents/agent-adapter.md)
 - [CONTRIBUTING.md](../../CONTRIBUTING.md)
+ - **Developer intelligence** (`apps/web/lib/intelligence/*.test.ts`): structured-output bounds,
+   prompt-injection-as-data behavior, deterministic evidence hashes, scoring thresholds, bounded
+   aggregation, model-provider isolation, and repository/profile reuse. Tests use a mock model and
+   do not require AI credentials.

@@ -1,17 +1,21 @@
 # PROMETHEUS Roadmap
 
-> Status: **Proposed.** The repository currently contains documentation only. This roadmap may be
-> adjusted as implementation proceeds and as repository state changes. The detailed phase
-> descriptions live in [docs/02-roadmap.md](docs/02-roadmap.md).
+> Status: **Active.** PROM-004C hardening is implemented on the PROM-004 feature branch; live
+> provider acceptance remains dependent on the configured OpenCode Go credential and environment.
+> The repository now contains a working web/database foundation and GitHub
+> authentication and public-repository ingestion. This roadmap may be adjusted as implementation
+> proceeds and as repository state changes. The detailed phase descriptions live in
+> [docs/02-roadmap.md](docs/02-roadmap.md).
 
 ## Milestones
 
 | Version | Milestone | Core outcome | Status |
 |---------|-----------|--------------|--------|
 | v0.1 | Foundation + documentation | Repository structure, docs system, conventions | In Development |
-| v0.2 | GitHub authentication | Developer signs in via GitHub OAuth | Planned |
-| v0.3 | Public repository ingestion | Ingest public repo metadata and history | Planned |
-| v0.4 | Developer engineering profile | Multidimensional human capability estimate | Planned |
+| v0.2 | GitHub authentication | Developer signs in via GitHub OAuth | Implemented |
+| v0.3 | Public repository ingestion | Ingest public repo metadata and languages | Implemented |
+| v0.35 | README evidence ingestion | Bounded, hashable README evidence for stored public repositories | Implemented |
+| v0.4 | Developer engineering profile | Multidimensional evidence-backed capability vector | Implemented (PROM-004) |
 | v0.5 | AgentAdapter + first model integration | Register an agent and abstract its model | Planned |
 | v0.6 | Benchmark engine | Deterministic sandboxed task evaluation | Planned |
 | v0.7 | Agent capability profiles | Capability vectors from benchmark results | Planned |

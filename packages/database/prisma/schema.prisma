@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                String    @id @default(cuid())
+  name              String?
+  email             String?   @unique
+  emailVerified     DateTime?
+  image             String?
+  githubUsername    String?
+  githubProfileUrl  String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  accounts          Account[]
+  sessions          Session[]
+  repositories      Repository[]
+  repositorySyncs   GitHubRepositorySync[]
+  intelligence       DeveloperIntelligence?
+}
+
+model Account {
+  userId                String
+  type                  String
+  provider              String
+  providerAccountId     String
+  refresh_token         String?
+  refresh_token_expires_at Int?
+  access_token          String?
+  expires_at            Int?
+  token_type            String?
+  scope                 String?
+  id_token              String?
+  session_state         String?
+  oauth_token_secret    String?
+  oauth_token           String?
+  user                  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+/// Raw public GitHub repository evidence. PROM-002 stores evidence only and does
+/// not derive developer skill scores here (that is a later milestone).
+model Repository {
+  id                 String   @id @default(cuid())
+  userId             String
+  githubRepositoryId BigInt   @unique
+  ownerLogin         String
+  name               String
+  fullName           String
+  description        String?
+  url                String
+  isFork             Boolean  @default(false)
+  isPrivate          Boolean  @default(false)
+  isArchived         Boolean  @default(false)
+  isTemplate         Boolean  @default(false)
+  defaultBranch      String?
+  primaryLanguage    String?
+  stars              Int      @default(0)
+  forks              Int      @default(0)
+  watchers           Int      @default(0)
+  openIssues         Int      @default(0)
+  size               Int      @default(0)
+  topics             String[] @default([])
+  githubCreatedAt    DateTime?
+  githubUpdatedAt    DateTime?
+  githubPushedAt     DateTime?
+  lastSyncedAt       DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  languages          RepositoryLanguage[]
+  readmeEvidence     RepositoryReadmeEvidence?
+  analysis           RepositoryAnalysis?
+
+  @@index([userId])
+}
+
+enum RepositoryReadmeStatus {
+  AVAILABLE
+  MISSING
+  EMPTY
+  TRUNCATED
+  FETCH_FAILED
+  RATE_LIMITED
+  AUTH_FAILED
+}
+
+/// The current bounded README evidence for a public repository. The content is
+/// untrusted source data, not a developer score or an instruction set.
+model RepositoryReadmeEvidence {
+  id           String               @id @default(cuid())
+  repositoryId String               @unique
+  sourcePath   String?
+  githubSha    String?
+  content      String?
+  contentHash  String?
+  contentBytes Int?
+  truncated    Boolean              @default(false)
+  encoding     String               @default("utf-8")
+  status       RepositoryReadmeStatus
+  fetchedAt    DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  repository   Repository            @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+/// Language byte evidence for a repository. Replaced on each sync so stale
+/// languages never accumulate.
+model RepositoryLanguage {
+  id           String     @id @default(cuid())
+  repositoryId String
+  language     String
+  bytes        Int
+  percentage   Float
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, language])
+  @@index([repositoryId])
+}
+
+enum GitHubSyncStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+  RATE_LIMITED
+}
+
+/// Observability record for one GitHub public-repository synchronization run.
+model GitHubRepositorySync {
+  id                  String           @id @default(cuid())
+  userId              String
+  status              GitHubSyncStatus
+  startedAt           DateTime         @default(now())
+  completedAt         DateTime?
+  repositoriesFound   Int              @default(0)
+  repositoriesCreated Int              @default(0)
+  repositoriesUpdated Int              @default(0)
+  repositoriesFailed  Int              @default(0)
+  rateLimitLimit      Int?
+  rateLimitRemaining  Int?
+  rateLimitResetAt    DateTime?
+  errorMessage        String?
+  user                User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum RepositoryAnalysisStatus {
+  PENDING
+  RUNNING
+  COMPLETE
+  FAILED
+  STALE
+}
+
+/// Validated, evidence-backed interpretation of one repository. The JSON
+/// output is canonical application data, not an unvalidated model transcript.
+model RepositoryAnalysis {
+  id              String                  @id @default(cuid())
+  repositoryId    String                  @unique
+  status          RepositoryAnalysisStatus @default(PENDING)
+  evidenceHash    String
+  validationVersion String                  @default("unknown")
+  promptVersion   String
+  modelProvider   String
+  modelName       String
+  output          Json?
+  errorMessage    String?
+  analyzedAt      DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  repository      Repository              @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([evidenceHash])
+}
+
+enum DeveloperIntelligenceStatus {
+  COMPLETE
+  PARTIAL
+  FAILED
+}
+
+/// Current developer-level capability vector derived from repository analyses.
+model DeveloperIntelligence {
+  id                    String                       @id @default(cuid())
+  userId                String                       @unique
+  status                DeveloperIntelligenceStatus
+  evidenceHash          String
+  promptVersion         String
+  scoringVersion        String
+  modelProvider         String
+  modelName             String
+  profileSummary        String?
+  overallConfidence     Float
+  eligibleRepositories  Int
+  analyzedRepositories  Int
+  reusedRepositories    Int
+  failedRepositories    Int
+  coverage              Float
+  output                Json
+  generatedAt           DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  user                  User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([evidenceHash])
+}

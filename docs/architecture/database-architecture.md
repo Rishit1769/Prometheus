@@ -1,7 +1,9 @@
 # Database Architecture
 
-> Status: **Proposed.** No schema is implemented. This is the intended entity model, not a final
-> specification. Do not treat this as a migration.
+> Status: **Implemented for identity, public repository evidence, and README evidence; future entities remain
+> proposed.** Migrations: `packages/database/prisma/migrations/20261006233500_init_auth_identity`
+> , `20261007140112_github_repository_ingestion`, and
+> `20261007180236_add_repository_readme_evidence`.
 
 ## Problem
 
@@ -15,7 +17,79 @@ results, and lineage — while keeping its vector index close to relational data
 - pgvector provides V1 vector similarity search ([ADR-003](../decisions/ADR-003-pgvector.md)).
 - Agent identity must be stable across model changes; skills are versioned and traced.
 
-## Design — Entity Relationships
+## Implemented identity model
+
+The database package owns the Prisma schema, generated client, migrations, and singleton client.
+The first migration creates Auth.js-compatible `User`, `Account`, `Session`, and
+`VerificationToken` tables. `User` also stores GitHub username and profile URL for the basic
+authenticated identity view.
+
+## Implemented repository evidence model (PROM-002)
+
+The second migration adds raw public-repository evidence:
+
+```mermaid
+erDiagram
+    USER ||--o{ REPOSITORY : owns
+    USER ||--o{ GITHUB_REPOSITORY_SYNC : "runs"
+    REPOSITORY ||--o{ REPOSITORY_LANGUAGE : "has languages"
+
+    REPOSITORY {
+      string id PK
+      string userId FK
+      bigint githubRepositoryId UK
+      string ownerLogin
+      string fullName
+      string primaryLanguage
+      string[] topics
+      datetime lastSyncedAt
+    }
+    REPOSITORY_LANGUAGE {
+      string id PK
+      string repositoryId FK
+      string language
+      int bytes
+      float percentage
+    }
+    GITHUB_REPOSITORY_SYNC {
+      string id PK
+      string userId FK
+      enum status
+      int repositoriesFound
+      int repositoriesCreated
+      int repositoriesUpdated
+      int repositoriesFailed
+    }
+```
+
+- `githubRepositoryId` is the unique external identity (GitHub's immutable repository id,
+  stored as `BIGINT`).
+- `RepositoryLanguage` is unique on `(repositoryId, language)`; rows are replaced on each sync.
+- `topics` is a PostgreSQL `String[]` column.
+- `GitHubRepositorySync` records each run with status and rate-limit information.
+
+Design rationale: [ADR-007](../decisions/ADR-007-github-repository-evidence.md).
+
+## Implemented README evidence model (PROM-003)
+
+`RepositoryReadmeEvidence` is a one-to-one current evidence record attached to `Repository`.
+It stores bounded normalized content, a SHA-256 hash of the complete normalized content, source
+metadata, and explicit retrieval status. Forks and defensively flagged private repositories are
+not eligible for this evidence stage.
+
+The 256 KiB persisted limit is a safety boundary for future model context. `contentBytes` and
+`contentHash` describe the complete normalized source even when `truncated` is true. PROM-004
+analysis records are stored separately in `RepositoryAnalysis` and `DeveloperIntelligence`.
+
+## Implemented intelligence model (PROM-004)
+
+`RepositoryAnalysis` stores one validated current analysis per eligible repository, keyed by
+`repositoryId` and indexed by status/evidence hash. `DeveloperIntelligence` stores one current,
+user-owned capability vector with coverage, scoring/prompt versions, provider metadata, and JSON
+output. Both models cascade with their owning repository or user. Raw OAuth credentials and model
+API keys are not part of either model.
+
+## Design — Future Entity Relationships
 
 ```mermaid
 erDiagram
@@ -62,8 +136,9 @@ erDiagram
 
 ## Vector Storage
 
-A `SkillEmbedding` table (or column) stores embeddings used for candidate retrieval. Similarity
-search answers *relevance only*; it does not encode quality. See
+A `SkillEmbedding` table (or column) will store embeddings used for candidate retrieval. The
+existing PostgreSQL server's `vector` extension is reserved for that future work; this milestone
+does not implement vector search. Similarity search answers *relevance only*; it does not encode quality. See
 [Skill Discovery](../skills/skill-discovery.md).
 
 ## Invariants (Proposed)

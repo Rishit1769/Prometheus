@@ -1,6 +1,6 @@
 # Authentication
 
-> Status: **Proposed.**
+> Status: **Implemented.** Live verification requires a reachable local PostgreSQL instance and interactive GitHub OAuth authorization.
 
 ## Problem
 
@@ -9,7 +9,7 @@ exposing credentials to autonomous agents.
 
 ## Context
 
-- GitHub OAuth is the planned authentication mechanism.
+- GitHub OAuth is implemented with Next.js App Router, Auth.js, and the Prisma adapter.
 - GitHub REST and GraphQL APIs provide evidence.
 - Credentials are high-value secrets (see
   [Security Architecture](../architecture/security-architecture.md)).
@@ -33,20 +33,40 @@ sequenceDiagram
     GH->>API: Redirect with authorization code
     API->>GH: Exchange code for access token
     GH-->>API: Access token
-    API->>API: Encrypt + store token; create session
+    API->>API: Persist provider account; create session
     API-->>Web: Authenticated session
 ```
 
 ### Scopes
 
-Scopes are minimized to what public analysis requires. Exact scopes are **to be finalized**;
-public read access is sufficient for V1 and private-repo scopes should be avoided.
+The default GitHub provider scope is used for this identity milestone. Public repository analysis
+and additional scopes are separate future work.
 
 ## Responsibilities
 
-- Core API performs the OAuth exchange and stores tokens encrypted.
-- Sessions are managed by the web app.
-- Tokens are used server-side for ingestion and are **never** exposed to agents.
+- Auth.js performs the OAuth exchange and persists the provider account through Prisma.
+- Sessions are managed with database-backed Auth.js sessions.
+- Tokens are used server-side for ingestion and are **never** exposed to agents or API responses.
+
+### Session and GitHub authorization
+
+PROMETHEUS database sessions and GitHub authorization are separate states. A valid PROMETHEUS
+session may remain active while GitHub returns `401`; ingestion then reports
+`GITHUB_REAUTH_REQUIRED` and the UI offers **Reconnect GitHub**.
+
+The credential service is the only application boundary that reads `Account.access_token` for
+repository or README synchronization. It scopes the lookup to the authenticated PROMETHEUS user,
+rejects missing or expired credentials, and passes the token only to the server-side GitHub client.
+
+The installed GitHub provider requests `read:user user:email`. This application currently returns
+an expiring access token and refresh token, including `expires_in` and
+`refresh_token_expires_in`; the provider mapping persists both expiry values. The credential
+service refreshes an expired access token and stores rotated tokens. If refresh fails or the
+refresh token expires, normal GitHub OAuth reconnect is required.
+
+On reconnect, the Auth.js `signIn` event updates the existing Account row using GitHub's
+authoritative `providerAccountId` plus the current PROMETHEUS `userId`. It replaces the access
+token and clears stale expiry/refresh metadata, without deleting users or linking arbitrary identities.
 
 ## Data Flow
 
@@ -55,20 +75,20 @@ See [Data Flow — GitHub Ingestion](../architecture/data-flow.md#flow-1--github
 ## Security Considerations
 
 - Never expose GitHub credentials directly to autonomous agents.
-- Store tokens encrypted at rest; never log them.
+- Store tokens encrypted at rest; never log or return them.
 - Use state parameters to prevent CSRF in the OAuth flow.
-- Support token revocation and rotation.
+- Treat GitHub `401` as reauthentication-required; refresh only through GitHub's documented token endpoint.
 
 ## Trade-offs
 
 - Requesting fewer scopes improves privacy but may limit future features.
 - Server-side token custody is safer than client-side but adds infrastructure.
 
-## Open Questions
+## Verification status
 
-- Which exact scopes are required?
-- How are tokens refreshed/revoked?
-- Is GitHub App authentication preferable to OAuth for long-lived access?
+Automated checks cover credential classification, reconnect scoping, safe `GET /user` validation,
+and application compilation. Live sign-in and database persistence require reachable PostgreSQL
+plus interactive GitHub OAuth authorization.
 
 ## Related Documents
 

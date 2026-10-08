@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted for the identity foundation; future operational decisions remain open.
 
 ## Context
 
@@ -42,7 +42,7 @@ Use PostgreSQL as the primary relational database for PROMETHEUS.
 ## Consequences
 
 - Positive: one primary store for relational data and V1 vector search; strong integrity.
-- Negative: PostgreSQL must be operated (via Docker Compose locally, managed in production);
+- Negative: PostgreSQL must be operated (the development environment uses the existing managed server);
   vector performance may eventually need a dedicated store.
 - Neutral: schema evolution is managed through migrations (Prisma).
 

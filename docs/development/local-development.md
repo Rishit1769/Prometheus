@@ -1,25 +1,24 @@
 # Local Development
 
-> Status: **Proposed.** No application has been scaffolded. The commands and steps below are the
-> *intended* workflow and do not yet work because no application code exists. This document will
-> be corrected as soon as scaffolding lands.
+> Status: **Implemented for the web/database foundation.**
 
 ## Current State
 
-The repository currently contains only documentation. There is no runnable application, so there
-is nothing to start locally yet.
+The repository contains a Next.js web app in `apps/web` and a Prisma database package in
+`packages/database`. GitHub OAuth is implemented but requires local GitHub OAuth credentials for
+live verification.
 
-## Intended Prerequisites (Planned)
+## Prerequisites
 
 | Tool | Purpose |
 |------|---------|
-| Node.js + package manager | Next.js web app and TypeScript core |
+| Node.js 20.9+ and npm | Next.js web app and TypeScript core |
 | Python | FastAPI AI/ML service |
 | Docker + Docker Compose | PostgreSQL, Redis, MinIO, and the sandbox |
 | PostgreSQL with pgvector | Primary database and vector search |
 | Git | Version control |
 
-## Intended Stack
+## Implemented Stack
 
 - Web: Next.js + TypeScript + Tailwind CSS + shadcn/ui
 - ORM: Prisma
@@ -29,17 +28,33 @@ is nothing to start locally yet.
 - Object storage: MinIO
 - Orchestration: Docker Compose
 
-## Intended Local Workflow (Planned)
+## Local Workflow
 
-1. Copy `.env.example` to `.env` and fill in values (see
-   [Environment Variables](environment-variables.md)).
-2. Start infrastructure (PostgreSQL+pgvector, Redis, MinIO) via Docker Compose.
-3. Apply database migrations (Prisma) once a schema exists.
-4. Run the web app and the AI/ML service in development mode.
-5. Open the web app in a browser and sign in with GitHub.
+1. Copy `.env.example` to `.env` and fill in values (see [Environment Variables](environment-variables.md)).
+2. Install dependencies with `npm install`.
+3. Verify PostgreSQL and pgvector with `npm run db:test`.
+4. Apply the reviewed migrations with `npm run db:migrate`.
+5. Start the web app with `npm run dev` and open `http://localhost:3000`.
+6. Sign in with GitHub after registering the callback URL below.
+7. Open `http://localhost:3000/repositories` and click **Sync repositories**.
 
-> Concrete commands are intentionally omitted until tooling exists; documenting commands that do
-> not work would violate this repository's honesty rules.
+The AI service and other infrastructure remain future work and are not started by this milestone.
+
+## Repository synchronization (PROM-002)
+
+The `/repositories` page and the `POST /api/github/repositories/sync` endpoint synchronize the
+signed-in developer's **public** repositories (metadata, languages, topics). Synchronization is
+idempotent: running it twice does not create duplicates. See
+[Repository Ingestion](../github/repository-ingestion.md) for behavior, error states, and
+limitations.
+
+Run the test suite (including database-integration tests) with `npm test`. Database tests skip
+when `DATABASE_URL` is not configured.
+
+## OAuth callback
+
+Register `http://localhost:3000/api/auth/callback/github` as the GitHub OAuth callback URL. The
+homepage URL is `http://localhost:3000`.
 
 ## Contributing Documentation Today
 

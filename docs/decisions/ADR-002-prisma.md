@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted for the identity foundation
 
 ## Context
 
@@ -13,7 +13,8 @@ source of truth, and a maintainable migration workflow.
 
 ## Decision
 
-Use Prisma as the primary application ORM for PROMETHEUS.
+Use Prisma 7.10.0 as the primary application ORM for PROMETHEUS, with Auth.js 5.0.0-beta.32 and
+`@auth/prisma-adapter` 2.11.3 for the first identity milestone.
 
 ## Rationale
 
@@ -38,6 +39,14 @@ Use Prisma as the primary application ORM for PROMETHEUS.
 - Negative: generated client and migration workflow impose some rigidity; advanced queries may
   need raw SQL (e.g. vector operators).
 - Neutral: Python services access the database only through explicit interfaces, not Prisma.
+
+## Compatibility decision
+
+Prisma 7 was selected because the current Auth.js Prisma adapter accepts Prisma 7 and Prisma's
+official Auth.js guide documents the adapter flow. Prisma 8 was not selected for this milestone:
+its new client runtime changes the generated-client integration and would add migration risk to
+the first authentication foundation. The database package isolates Prisma behind a singleton
+client, so a future Prisma upgrade can be evaluated in one package.
 
 ## Revisit Conditions
 
