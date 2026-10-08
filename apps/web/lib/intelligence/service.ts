@@ -3,7 +3,8 @@ import { aggregateRepositoryAnalyses } from "./aggregate";
 import { sha256 } from "./hash";
 import { createConfiguredIntelligenceModel } from "./model";
 import { DeveloperAnalysisFailure, diagnosticForError, formatDiagnostic, type IntelligenceDiagnostic } from "./errors";
-import { DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, EVIDENCE_VALIDATION_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
+import { isCurrentDeveloperIntelligenceOutput } from "./profile-output";
+import { DEVELOPER_OUTPUT_SCHEMA_VERSION, DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, EVIDENCE_VALIDATION_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
 import { validateEvidenceReferences, validateRepositoryAnalysisOutput } from "./validate";
 
 type DatabaseClient = typeof prisma;
@@ -13,6 +14,9 @@ export interface DeveloperAnalysisResult {
   repositoriesEligible: number;
   repositoriesAnalyzed: number;
   repositoriesReused: number;
+  repositoriesRevalidated: number;
+  repositoriesInvalidated: number;
+  repositoriesRegenerated: number;
   repositoriesFailed: number;
   developerProfileGenerated: boolean;
   developerProfileReused: boolean;
@@ -96,6 +100,9 @@ async function runDeveloperAnalysis(
   });
   let analyzed = 0;
   let reused = 0;
+  let revalidated = 0;
+  let invalidated = 0;
+  let regenerated = 0;
   let failed = 0;
   let modelRequests = 0;
   let firstFailure: IntelligenceDiagnostic | undefined;
@@ -106,22 +113,33 @@ async function runDeveloperAnalysis(
   });
 
   await runBounded(work, async ({ repository, input, legacyEvidenceHash, evidenceHash }) => {
-    const currentCache = repository.analysis?.status === "COMPLETE" && repository.analysis.evidenceHash === evidenceHash;
-    const legacyCache = repository.analysis?.status === "COMPLETE" && repository.analysis.evidenceHash === legacyEvidenceHash;
-    if ((currentCache || legacyCache) && repository.analysis?.output) {
+    const hasCompletedCache = repository.analysis?.status === "COMPLETE" && Boolean(repository.analysis.output);
+    const currentCache = hasCompletedCache && repository.analysis?.evidenceHash === evidenceHash;
+    const legacyCache = hasCompletedCache && repository.analysis?.evidenceHash === legacyEvidenceHash;
+    let regenerateInvalidatedCache = repository.analysis?.status === "STALE" && Boolean(repository.analysis.output);
+    if (hasCompletedCache && (currentCache || legacyCache) && repository.analysis?.output) {
       let cachedOutput: RepositoryAnalysisOutput;
       try {
         cachedOutput = validateRepositoryAnalysisOutput(repository.analysis.output);
         const grounded = validateEvidenceReferences(cachedOutput, input).output;
-        if (repository.analysis.validationVersion !== EVIDENCE_VALIDATION_VERSION) {
+        const requiresRevalidation = legacyCache || repository.analysis.validationVersion !== EVIDENCE_VALIDATION_VERSION;
+        if (requiresRevalidation) {
           await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { evidenceHash, output: JSON.parse(JSON.stringify(grounded)), validationVersion: EVIDENCE_VALIDATION_VERSION, status: "COMPLETE", analyzedAt: repository.analysis.analyzedAt ?? new Date(), errorMessage: null } });
+          revalidated += 1;
+        } else {
+          reused += 1;
         }
         outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output: grounded });
-        reused += 1;
         return;
       } catch {
+        invalidated += 1;
+        regenerateInvalidatedCache = true;
         await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "STALE", validationVersion: EVIDENCE_VALIDATION_VERSION, errorMessage: "Cached analysis failed current evidence validation." } });
       }
+    } else if (hasCompletedCache) {
+      invalidated += 1;
+      regenerateInvalidatedCache = true;
+      await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "STALE", validationVersion: EVIDENCE_VALIDATION_VERSION, errorMessage: "Repository evidence changed; cached analysis invalidated." } });
     }
     try {
       await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "RUNNING", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName }, update: { status: "RUNNING", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage: null } });
@@ -130,16 +148,17 @@ async function runDeveloperAnalysis(
       await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "COMPLETE", validationVersion: EVIDENCE_VALIDATION_VERSION, output: JSON.parse(JSON.stringify(output)), analyzedAt: new Date(), errorMessage: null } });
       outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output });
       analyzed += 1;
+      if (regenerateInvalidatedCache) regenerated += 1;
     } catch (error) {
       failed += 1;
       const diagnostic = diagnosticForError(error, "persistence");
       firstFailure ??= diagnostic;
       const errorMessage = formatDiagnostic(diagnostic);
-      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "FAILED", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage }, update: { status: "FAILED", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage } });
+      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "FAILED", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage }, update: { status: "FAILED", evidenceHash, validationVersion: EVIDENCE_VALIDATION_VERSION, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, analyzedAt: null, errorMessage } });
     }
   });
 
-  const successfulRepositories = analyzed + reused;
+  const successfulRepositories = analyzed + reused + revalidated;
   if (repositories.length === 0 || successfulRepositories === 0) {
     // Remove the legacy zero-coverage profile written by earlier PROM-004 code.
     // Do not replace it with another cached profile that looks like an analysis.
@@ -149,6 +168,9 @@ async function runDeveloperAnalysis(
         repositoriesEligible: 0,
         repositoriesAnalyzed: 0,
         repositoriesReused: 0,
+        repositoriesRevalidated: 0,
+        repositoriesInvalidated: 0,
+        repositoriesRegenerated: 0,
         repositoriesFailed: 0,
         developerProfileGenerated: false,
         developerProfileReused: false,
@@ -166,21 +188,21 @@ async function runDeveloperAnalysis(
   const aggregate = aggregateRepositoryAnalyses(outputs);
   const profileEvidenceHash = sha256({ scoringVersion: DOMAIN_SCORING_VERSION, promptVersion: DEVELOPER_PROMPT_VERSION, provider: model.provider, modelName: model.modelName, eligibleRepositories: work.map((item) => ({ repositoryId: item.repository.id, evidenceHash: item.evidenceHash, state: outputs.some((output) => output.repositoryId === item.repository.id) ? "COMPLETE" : "FAILED" })).sort((a, b) => a.repositoryId.localeCompare(b.repositoryId)) });
   const existingProfile = await db.developerIntelligence.findUnique({ where: { userId } });
-  if (existingProfile?.status === "COMPLETE" && existingProfile.coverage > 0 && existingProfile.evidenceHash === profileEvidenceHash) {
+  if (existingProfile?.status === "COMPLETE" && existingProfile.coverage > 0 && existingProfile.evidenceHash === profileEvidenceHash && isCurrentDeveloperIntelligenceOutput(existingProfile.output)) {
     // Repair the timestamp on a valid profile updated by versions that did not
     // advance generatedAt when replacing a prior zero-coverage result.
     if (existingProfile.generatedAt < existingProfile.updatedAt) {
       await db.developerIntelligence.update({ where: { userId }, data: { generatedAt: existingProfile.updatedAt } });
     }
-    return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length, status: "COMPLETE", modelRequests };
+    return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesRevalidated: revalidated, repositoriesInvalidated: invalidated, repositoriesRegenerated: regenerated, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: successfulRepositories / repositories.length, status: "COMPLETE", modelRequests };
   }
-  const coverage = repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length;
+  const coverage = successfulRepositories / repositories.length;
   const summary = deterministicSummary(aggregate, coverage);
-  const output = { ...aggregate, limitations: [...aggregate.limitations, ...summary.limitations] };
+  const output = { schemaVersion: DEVELOPER_OUTPUT_SCHEMA_VERSION, ...aggregate, limitations: [...aggregate.limitations, ...summary.limitations] };
   const jsonOutput = JSON.parse(JSON.stringify(output));
   const status = failed ? "PARTIAL" : "COMPLETE";
-  await db.developerIntelligence.upsert({ where: { userId }, create: { userId, status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput }, update: { status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput, generatedAt: new Date() } });
-  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status, modelRequests, ...(firstFailure ? { diagnostics: firstFailure } : {}) };
+  await db.developerIntelligence.upsert({ where: { userId }, create: { userId, status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused + revalidated, failedRepositories: failed, coverage, output: jsonOutput }, update: { status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused + revalidated, failedRepositories: failed, coverage, output: jsonOutput, generatedAt: new Date() } });
+  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesRevalidated: revalidated, repositoriesInvalidated: invalidated, repositoriesRegenerated: regenerated, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status, modelRequests, ...(firstFailure ? { diagnostics: firstFailure } : {}) };
 }
 
 export function analyzeDeveloper(userId: string, dependencies: { db?: DatabaseClient; model?: IntelligenceModel | null } = {}): Promise<DeveloperAnalysisResult> {

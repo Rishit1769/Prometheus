@@ -24,7 +24,7 @@ describe("POST /api/developer/analyze", () => {
 
   it("uses the session user and exposes only aggregate progress", async () => {
     authMock.mockResolvedValue({ user: { id: "user-1" } });
-    analyzeMock.mockResolvedValue({ repositoriesEligible: 2, repositoriesAnalyzed: 2, repositoriesReused: 1, repositoriesFailed: 0, developerProfileGenerated: true, developerProfileReused: false, coverage: 1, status: "COMPLETE" });
+    analyzeMock.mockResolvedValue({ repositoriesEligible: 2, repositoriesAnalyzed: 1, repositoriesReused: 1, repositoriesRevalidated: 0, repositoriesInvalidated: 0, repositoriesRegenerated: 0, repositoriesFailed: 0, developerProfileGenerated: true, developerProfileReused: false, coverage: 1, status: "COMPLETE" });
     const response = await POST();
     expect(response.status).toBe(200);
     expect(analyzeMock).toHaveBeenCalledWith("user-1");

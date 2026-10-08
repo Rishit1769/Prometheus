@@ -64,7 +64,9 @@ export function aggregateRepositoryAnalyses(
       evidenceReferences,
       supportingRepositories,
       limitations,
-      summary: signals.length === 0 ? "Insufficient validated repository evidence for this domain." : `${supportingRepositories.length} repository${supportingRepositories.length === 1 ? "" : "ies"} contain validated evidence for this domain.`,
+      summary: signals.length === 0
+        ? `No validated repository evidence currently supports ${domain.toLowerCase().replace("_", "/")}.`
+        : `Validated ${domain.toLowerCase().replace("_", "/")} signals appear in ${supportingRepositories.length} ${supportingRepositories.length === 1 ? "repository" : "repositories"}, grounded by ${evidenceReferences.length} evidence references.`,
     } satisfies DeveloperDomainIntelligence;
   });
   const strongestDomains = [...domains].filter((domain) => domain.level > 0).sort((a, b) => b.evidenceScore - a.evidenceScore || a.domain.localeCompare(b.domain)).slice(0, 3).map((domain) => domain.domain);

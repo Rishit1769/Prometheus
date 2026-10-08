@@ -15,6 +15,9 @@ export function AnalyzeDeveloperButton() {
       const body = await response.json().catch(() => null) as {
         repositoriesAnalyzed?: number;
         repositoriesReused?: number;
+        repositoriesRevalidated?: number;
+        repositoriesInvalidated?: number;
+        repositoriesRegenerated?: number;
         repositoriesFailed?: number;
         status?: string;
         diagnostics?: { stage?: string; code?: string; providerStatus?: number | null; message?: string; validationIssuePaths?: string[] };
@@ -30,10 +33,15 @@ export function AnalyzeDeveloperButton() {
       } else {
         const failed = body?.repositoriesFailed ?? 0;
         const diagnostic = body?.diagnostics;
+        const cacheDetails = [
+          body?.repositoriesRevalidated ? `${body.repositoriesRevalidated} revalidated` : null,
+          body?.repositoriesInvalidated ? `${body.repositoriesInvalidated} invalidated` : null,
+          body?.repositoriesRegenerated ? `${body.repositoriesRegenerated} regenerated` : null,
+        ].filter(Boolean);
         const details = diagnostic
           ? ` First failure: ${diagnostic.stage}/${diagnostic.code}${diagnostic.providerStatus ? ` (HTTP ${diagnostic.providerStatus})` : ""}${diagnostic.validationIssuePaths?.length ? ` at ${diagnostic.validationIssuePaths.join(", ")}` : ""}. ${diagnostic.message ?? ""}`
           : "";
-        setMessage(`Analyzed ${body?.repositoriesAnalyzed ?? 0} repositories; reused ${body?.repositoriesReused ?? 0}.${failed ? ` ${failed} failed; coverage is partial.` : ""}${details}`);
+        setMessage(`Analyzed ${body?.repositoriesAnalyzed ?? 0}; reused ${body?.repositoriesReused ?? 0}${cacheDetails.length ? `; ${cacheDetails.join(", ")}` : ""}.${failed ? ` ${failed} failed; coverage is partial.` : ""}${details}`);
         router.refresh();
       }
     } catch {

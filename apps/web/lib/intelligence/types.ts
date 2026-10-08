@@ -17,6 +17,8 @@ export type DocumentationQuality = "LIMITED" | "BASIC" | "GOOD" | "STRONG";
 export const REPOSITORY_PROMPT_VERSION = "repository-analysis-v3";
 export const REPOSITORY_SCHEMA_VERSION = "repository-analysis-schema-v3";
 export const DEVELOPER_PROMPT_VERSION = "developer-aggregation-v3";
+export const DEVELOPER_OUTPUT_SCHEMA_VERSION = "developer-intelligence-output-v3";
+export const LEGACY_DEVELOPER_OUTPUT_SCHEMA_VERSION = "legacy";
 export const DOMAIN_SCORING_VERSION = "domain-score-v1";
 export const EVIDENCE_VALIDATION_VERSION = "evidence-grounding-v1";
 export const MODEL_PROVIDER = "openai";
@@ -115,6 +117,7 @@ export interface DeveloperDomainIntelligence {
 }
 
 export interface DeveloperIntelligenceOutput {
+  schemaVersion: typeof DEVELOPER_OUTPUT_SCHEMA_VERSION;
   domains: DeveloperDomainIntelligence[];
   strongestDomains: IntelligenceDomain[];
   strongestTechnologies: string[];

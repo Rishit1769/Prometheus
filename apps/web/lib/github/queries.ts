@@ -1,4 +1,5 @@
 import { prisma } from "@prometheus/database";
+import { normalizePersistedDeveloperIntelligenceOutput } from "../intelligence/profile-output";
 import type { GitHubSyncStatusValue } from "./types";
 
 /** The Prisma client type, derived from the shared singleton without a new export. */
@@ -205,7 +206,7 @@ export async function getDeveloperIntelligenceForUser(userId: string, db: Databa
     reusedRepositories: profile.reusedRepositories,
     failedRepositories: profile.failedRepositories,
     coverage: profile.coverage,
-    output: profile.output,
+    output: normalizePersistedDeveloperIntelligenceOutput(profile.output),
     generatedAt: profile.generatedAt.toISOString(),
     updatedAt: profile.updatedAt.toISOString(),
   };
@@ -214,5 +215,8 @@ export async function getDeveloperIntelligenceForUser(userId: string, db: Databa
 export async function getRepositoryIntelligenceForUser(userId: string, repositoryId: string, db: DatabaseClient = prisma) {
   const repository = await db.repository.findFirst({ where: { id: repositoryId, userId }, select: { id: true, name: true, fullName: true, analysis: true } });
   if (!repository) return null;
-  return { repositoryId: repository.id, name: repository.name, fullName: repository.fullName, analysis: repository.analysis };
+  const analysis = repository.analysis && repository.analysis.status !== "COMPLETE"
+    ? { ...repository.analysis, output: null }
+    : repository.analysis;
+  return { repositoryId: repository.id, name: repository.name, fullName: repository.fullName, analysis };
 }

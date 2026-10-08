@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { analyzeDeveloper } from "./service";
 import { DeveloperAnalysisFailure, IntelligenceError } from "./errors";
 import type { IntelligenceModel, RepositoryAnalysisOutput } from "./types";
-import { EVIDENCE_VALIDATION_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION } from "./types";
+import { DEVELOPER_OUTPUT_SCHEMA_VERSION, EVIDENCE_VALIDATION_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION } from "./types";
 import { sha256 } from "./hash";
 
 const analysisOutput: RepositoryAnalysisOutput = {
@@ -11,6 +11,54 @@ const analysisOutput: RepositoryAnalysisOutput = {
 
 function model(): IntelligenceModel {
   return { provider: "mock", modelName: "mock-v1", analyzeRepository: vi.fn().mockResolvedValue(analysisOutput), summarizeDeveloper: vi.fn().mockResolvedValue({ profileSummary: "Evidence indicates backend signals.", limitations: [] }) };
+}
+
+type TestRepository = {
+  id: string;
+  name: string;
+  description: string | null;
+  topics: string[];
+  isFork: boolean;
+  isPrivate: boolean;
+  isArchived: boolean;
+  githubUpdatedAt: Date | null;
+  languages: { language: string; bytes: number }[];
+  readmeEvidence: { status: string; content: string; contentHash: string; truncated: boolean } | null;
+};
+
+function databaseHarness(repositories: TestRepository[]) {
+  const analyses = new Map<string, Record<string, unknown>>();
+  let profile: Record<string, unknown> | null = null;
+  const db = {
+    repository: {
+      findMany: vi.fn(async () => repositories.map((repository) => ({ ...repository, analysis: analyses.get(repository.id) ?? null }))),
+    },
+    repositoryAnalysis: {
+      upsert: vi.fn(async ({ where, create, update }: { where: { repositoryId: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+        const next = { ...(analyses.get(where.repositoryId) ?? create), ...update };
+        analyses.set(where.repositoryId, next);
+        return next;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { repositoryId: string }; data: Record<string, unknown> }) => {
+        const next = { ...(analyses.get(where.repositoryId) ?? {}), ...data };
+        analyses.set(where.repositoryId, next);
+        return next;
+      }),
+    },
+    developerIntelligence: {
+      findUnique: vi.fn(async () => profile),
+      upsert: vi.fn(async ({ create, update }: { create: Record<string, unknown>; update: Record<string, unknown> }) => {
+        profile = { ...(profile ?? create), ...update };
+        return profile;
+      }),
+      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        profile = { ...(profile ?? {}), ...data };
+        return profile;
+      }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+  };
+  return { db, analyses, getProfile: () => profile, setProfile: (value: Record<string, unknown> | null) => { profile = value; } };
 }
 
 describe("developer analysis orchestration", () => {
@@ -38,12 +86,26 @@ describe("developer analysis orchestration", () => {
     expect(first.developerProfileGenerated).toBe(true);
     expect(first.repositoriesAnalyzed).toBe(1);
     expect(first.modelRequests).toBe(1);
+    expect((profile?.output as { schemaVersion?: string }).schemaVersion).toBe(DEVELOPER_OUTPUT_SCHEMA_VERSION);
     expect(second.repositoriesReused).toBe(1);
     expect(second.repositoriesAnalyzed).toBe(0);
     expect(second.developerProfileReused).toBe(true);
     expect(second.modelRequests).toBe(0);
     expect(db.developerIntelligence.update).toHaveBeenCalledWith({ where: { userId: "user-1" }, data: { generatedAt: new Date("2026-01-02T00:00:00Z") } });
     expect(secondModel.analyzeRepository).not.toHaveBeenCalled();
+
+    const legacyOutput = { ...(profile?.output as Record<string, unknown>) };
+    legacyOutput.schemaVersion = "developer-intelligence-output-v2";
+    profile = { ...(profile ?? {}), output: legacyOutput };
+    const refreshModel = model();
+    const refreshed = await analyzeDeveloper("user-1", { db: db as never, model: refreshModel });
+    expect(refreshed.developerProfileGenerated).toBe(true);
+    expect(refreshed.developerProfileReused).toBe(false);
+    expect(refreshed.repositoriesReused).toBe(1);
+    expect(refreshed.repositoriesAnalyzed).toBe(0);
+    expect(refreshed.modelRequests).toBe(0);
+    expect((profile?.output as { schemaVersion?: string }).schemaVersion).toBe(DEVELOPER_OUTPUT_SCHEMA_VERSION);
+    expect(refreshModel.analyzeRepository).not.toHaveBeenCalled();
   });
 
   it("does not persist a zero-coverage developer profile after total provider failure", async () => {
@@ -129,9 +191,105 @@ describe("developer analysis orchestration", () => {
       developerIntelligence: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     };
     const result = await analyzeDeveloper("legacy-user", { db: db as never, model: model() });
-    expect(result.repositoriesReused).toBe(1);
+    expect(result.repositoriesRevalidated).toBe(1);
+    expect(result.repositoriesReused).toBe(0);
+    expect(result.repositoriesInvalidated).toBe(0);
+    expect(result.repositoriesRegenerated).toBe(0);
     expect(result.modelRequests).toBe(0);
+    expect(result.developerProfileGenerated).toBe(true);
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ validationVersion: EVIDENCE_VALIDATION_VERSION }) }));
+    expect(db.developerIntelligence.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ output: expect.objectContaining({ schemaVersion: DEVELOPER_OUTPUT_SCHEMA_VERSION }) }) }));
+  });
+
+  it("invalidates and regenerates analysis when stored README evidence changes", async () => {
+    const repository: TestRepository = { id: "readme-change", name: "readme-change", description: null, topics: [], isFork: false, isPrivate: false, isArchived: false, githubUpdatedAt: null, languages: [{ language: "TypeScript", bytes: 10 }], readmeEvidence: { status: "AVAILABLE", content: "# First", contentHash: "readme-v1", truncated: false } };
+    const harness = databaseHarness([repository]);
+    const first = await analyzeDeveloper("readme-change-user", { db: harness.db as never, model: model() });
+    const firstHash = harness.analyses.get(repository.id)?.evidenceHash;
+    repository.readmeEvidence = { status: "AVAILABLE", content: "# Updated", contentHash: "readme-v2", truncated: false };
+    const refreshedModel = model();
+
+    const second = await analyzeDeveloper("readme-change-user", { db: harness.db as never, model: refreshedModel });
+
+    expect(first.repositoriesAnalyzed).toBe(1);
+    expect(second.repositoriesEligible).toBe(1);
+    expect(second.repositoriesInvalidated).toBe(1);
+    expect(second.repositoriesRegenerated).toBe(1);
+    expect(second.repositoriesAnalyzed).toBe(1);
+    expect(second.modelRequests).toBe(1);
+    expect(harness.analyses.get(repository.id)?.evidenceHash).not.toBe(firstHash);
+    expect(refreshedModel.analyzeRepository).toHaveBeenCalledOnce();
+  });
+
+  it("analyzes a newly eligible repository while reusing unchanged repository evidence", async () => {
+    const firstRepository: TestRepository = { id: "eligible-1", name: "one", description: null, topics: [], isFork: false, isPrivate: false, isArchived: false, githubUpdatedAt: null, languages: [{ language: "TypeScript", bytes: 10 }], readmeEvidence: null };
+    const repositories = [firstRepository];
+    const harness = databaseHarness(repositories);
+    await analyzeDeveloper("new-eligible-user", { db: harness.db as never, model: model() });
+    repositories.push({ ...firstRepository, id: "eligible-2", name: "two" });
+    const secondModel = model();
+
+    const result = await analyzeDeveloper("new-eligible-user", { db: harness.db as never, model: secondModel });
+
+    expect(result.repositoriesEligible).toBe(2);
+    expect(result.repositoriesReused).toBe(1);
+    expect(result.repositoriesAnalyzed).toBe(1);
+    expect(result.repositoriesInvalidated).toBe(0);
+    expect(result.coverage).toBe(1);
+    expect(secondModel.analyzeRepository).toHaveBeenCalledOnce();
+  });
+
+  it("retries a failed repository and completes the profile when the analysis later succeeds", async () => {
+    const repository: TestRepository = { id: "retry-1", name: "retry", description: null, topics: [], isFork: false, isPrivate: false, isArchived: false, githubUpdatedAt: null, languages: [{ language: "TypeScript", bytes: 10 }], readmeEvidence: null };
+    const harness = databaseHarness([repository]);
+    const failingModel: IntelligenceModel = {
+      provider: "mock",
+      modelName: "mock-v1",
+      analyzeRepository: vi.fn().mockRejectedValue(new IntelligenceError({ stage: "provider", code: "TEMPORARY_FAILURE", message: "temporary provider failure" })),
+      summarizeDeveloper: vi.fn(),
+    };
+    await expect(analyzeDeveloper("retry-user", { db: harness.db as never, model: failingModel })).rejects.toBeInstanceOf(DeveloperAnalysisFailure);
+    expect(harness.analyses.get(repository.id)?.status).toBe("FAILED");
+
+    const recoveredModel = model();
+    const result = await analyzeDeveloper("retry-user", { db: harness.db as never, model: recoveredModel });
+
+    expect(result.status).toBe("COMPLETE");
+    expect(result.repositoriesAnalyzed).toBe(1);
+    expect(result.repositoriesFailed).toBe(0);
+    expect(result.coverage).toBe(1);
+    expect(recoveredModel.analyzeRepository).toHaveBeenCalledOnce();
+    expect(harness.analyses.get(repository.id)?.status).toBe("COMPLETE");
+  });
+
+  it("regenerates a legacy profile-output schema from validated cached repository analyses without model calls", async () => {
+    const repository: TestRepository = { id: "profile-schema-legacy", name: "legacy-profile", description: "service", topics: [], isFork: false, isPrivate: false, isArchived: false, githubUpdatedAt: null, languages: [{ language: "TypeScript", bytes: 10 }], readmeEvidence: { status: "AVAILABLE", content: "# API", contentHash: "h1", truncated: false } };
+    const harness = databaseHarness([repository]);
+    await analyzeDeveloper("legacy-profile-user", { db: harness.db as never, model: model() });
+    const oldProfile = harness.getProfile() ?? {};
+    const legacyOutput = { ...(oldProfile.output as Record<string, unknown>) };
+    delete legacyOutput.schemaVersion;
+    legacyOutput.domains = ((legacyOutput.domains as Record<string, unknown>[]) ?? []).map((domain) => {
+      const legacyDomain = { ...domain };
+      delete legacyDomain.supportingRepositories;
+      delete legacyDomain.limitations;
+      return legacyDomain;
+    });
+    harness.setProfile({ ...oldProfile, output: legacyOutput });
+    const noModelCalls = model();
+
+    const result = await analyzeDeveloper("legacy-profile-user", { db: harness.db as never, model: noModelCalls });
+
+    expect(result.repositoriesAnalyzed).toBe(0);
+    expect(result.repositoriesReused).toBe(1);
+    expect(result.repositoriesRevalidated).toBe(0);
+    expect(result.modelRequests).toBe(0);
+    expect(result.developerProfileGenerated).toBe(true);
+    expect(noModelCalls.analyzeRepository).not.toHaveBeenCalled();
+    const newOutput = harness.getProfile()?.output as { schemaVersion: string; domains: { domain: string; supportingRepositories: { repositoryName: string; evidenceReferences: unknown[] }[] }[] };
+    expect(newOutput.schemaVersion).toBe(DEVELOPER_OUTPUT_SCHEMA_VERSION);
+    expect(newOutput.domains.find((domain) => domain.domain === "BACKEND")?.supportingRepositories[0]).toMatchObject({ repositoryName: "legacy-profile" });
+    expect(newOutput.domains.find((domain) => domain.domain === "BACKEND")?.supportingRepositories[0].evidenceReferences).toHaveLength(1);
   });
 
   it("does not cache an empty no-repository result as a zero-coverage profile", async () => {
