@@ -14,9 +14,9 @@ export type DomainLevel = 0 | 1 | 2 | 3 | 4 | 5;
 export type ProjectComplexity = "TRIVIAL" | "SIMPLE" | "MODERATE" | "COMPLEX" | "ADVANCED";
 export type DocumentationQuality = "LIMITED" | "BASIC" | "GOOD" | "STRONG";
 
-export const REPOSITORY_PROMPT_VERSION = "repository-analysis-v1";
-export const REPOSITORY_SCHEMA_VERSION = "repository-analysis-schema-v1";
-export const DEVELOPER_PROMPT_VERSION = "developer-aggregation-v1";
+export const REPOSITORY_PROMPT_VERSION = "repository-analysis-v3";
+export const REPOSITORY_SCHEMA_VERSION = "repository-analysis-schema-v3";
+export const DEVELOPER_PROMPT_VERSION = "developer-aggregation-v3";
 export const DOMAIN_SCORING_VERSION = "domain-score-v1";
 export const MODEL_PROVIDER = "openai";
 

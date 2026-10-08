@@ -6,6 +6,7 @@ import {
   type RepositoryAnalysisInput,
   type IntelligenceDomain,
 } from "./types";
+import { IntelligenceError } from "./errors";
 
 const COMPLEXITIES = ["TRIVIAL", "SIMPLE", "MODERATE", "COMPLEX", "ADVANCED"] as const;
 const DOCUMENTATION = ["LIMITED", "BASIC", "GOOD", "STRONG"] as const;
@@ -15,74 +16,91 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function boundedString(value: unknown, field: string, max: number): string {
-  if (typeof value !== "string" || value.length > max) throw new Error(`Invalid ${field}`);
+export class OutputValidationError extends IntelligenceError {
+  constructor(path: string) {
+    super({
+      stage: "validation",
+      code: "OUTPUT_SCHEMA_INVALID",
+      message: `Model output did not match the repository analysis schema at ${path}.`,
+      validationIssuePaths: [path],
+    });
+    this.name = "OutputValidationError";
+  }
+}
+
+function invalid(path: string): never {
+  throw new OutputValidationError(path);
+}
+
+function boundedString(value: unknown, path: string, max: number): string {
+  if (typeof value !== "string" || value.length > max) return invalid(path);
   return value;
 }
 
-function boundedArray(value: unknown, field: string, max: number): unknown[] {
-  if (!Array.isArray(value) || value.length > max) throw new Error(`Invalid ${field}`);
+function boundedArray(value: unknown, path: string, max: number): unknown[] {
+  if (!Array.isArray(value) || value.length > max) return invalid(path);
   return value;
 }
 
-function boundedNumber(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) throw new Error(`Invalid ${field}`);
+function boundedNumber(value: unknown, path: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) return invalid(path);
   return value;
 }
 
-function validateReference(value: unknown): EvidenceReference {
-  if (!isRecord(value) || !REFERENCE_TYPES.includes(value.type as (typeof REFERENCE_TYPES)[number])) throw new Error("Invalid evidence reference");
+function validateReference(value: unknown, path: string): EvidenceReference {
+  if (!isRecord(value) || !REFERENCE_TYPES.includes(value.type as (typeof REFERENCE_TYPES)[number])) return invalid(`${path}.type`);
   return {
     type: value.type as EvidenceReference["type"],
-    reference: boundedString(value.reference, "evidence reference", 300),
-    ...(value.excerptHash === undefined ? {} : { excerptHash: boundedString(value.excerptHash, "excerpt hash", 128) }),
+    reference: boundedString(value.reference, `${path}.reference`, 300),
+    ...(value.excerptHash === undefined ? {} : { excerptHash: boundedString(value.excerptHash, `${path}.excerptHash`, 128) }),
   };
 }
 
-function validateDomain(value: unknown): RepositoryAnalysisOutput["demonstratedDomains"][number] {
-  if (!isRecord(value) || !INTELLIGENCE_DOMAINS.includes(value.domain as IntelligenceDomain)) throw new Error("Invalid domain");
+function validateDomain(value: unknown, path: string): RepositoryAnalysisOutput["demonstratedDomains"][number] {
+  if (!isRecord(value) || !INTELLIGENCE_DOMAINS.includes(value.domain as IntelligenceDomain)) return invalid(`${path}.domain`);
   return {
     domain: value.domain as IntelligenceDomain,
-    strength: boundedNumber(value.strength, "domain strength"),
-    confidence: boundedNumber(value.confidence, "domain confidence"),
-    evidence: boundedArray(value.evidence, "domain evidence", 12).map(validateReference),
-    reasoningSummary: boundedString(value.reasoningSummary, "reasoning summary", 600),
+    strength: boundedNumber(value.strength, `${path}.strength`),
+    confidence: boundedNumber(value.confidence, `${path}.confidence`),
+    evidence: boundedArray(value.evidence, `${path}.evidence`, 12).map((item, index) => validateReference(item, `${path}.evidence[${index}]`)),
+    reasoningSummary: boundedString(value.reasoningSummary, `${path}.reasoningSummary`, 600),
   };
 }
 
 export function validateRepositoryAnalysisOutput(value: unknown): RepositoryAnalysisOutput {
-  if (!isRecord(value)) throw new Error("Model output must be an object");
-  const domains = boundedArray(value.demonstratedDomains, "demonstrated domains", 8).map(validateDomain);
-  if (new Set(domains.map((domain) => domain.domain)).size !== domains.length) throw new Error("Duplicate domain");
-  const technologies = boundedArray(value.detectedTechnologies, "detected technologies", 40).map((item) => {
-    if (!isRecord(item)) throw new Error("Invalid technology");
+  if (!isRecord(value)) return invalid("$");
+  const domains = boundedArray(value.demonstratedDomains, "demonstratedDomains", 8).map((item, index) => validateDomain(item, `demonstratedDomains[${index}]`));
+  if (new Set(domains.map((domain) => domain.domain)).size !== domains.length) return invalid("demonstratedDomains");
+  const technologies = boundedArray(value.detectedTechnologies, "detectedTechnologies", 40).map((item, index) => {
+    const path = `detectedTechnologies[${index}]`;
+    if (!isRecord(item)) return invalid(path);
     return {
-      name: boundedString(item.name, "technology", 100),
-      evidence: boundedArray(item.evidence, "technology evidence", 12).map(validateReference),
+      name: boundedString(item.name, `${path}.name`, 100),
+      evidence: boundedArray(item.evidence, `${path}.evidence`, 12).map((reference, referenceIndex) => validateReference(reference, `${path}.evidence[${referenceIndex}]`)),
     };
   });
-  const references = boundedArray(value.evidenceReferences, "evidence references", 30).map(validateReference);
-  if (!COMPLEXITIES.includes(value.projectComplexity as (typeof COMPLEXITIES)[number])) throw new Error("Invalid complexity");
-  if (!DOCUMENTATION.includes(value.documentationQuality as (typeof DOCUMENTATION)[number])) throw new Error("Invalid documentation quality");
+  const references = boundedArray(value.evidenceReferences, "evidenceReferences", 30).map((reference, index) => validateReference(reference, `evidenceReferences[${index}]`));
+  if (!COMPLEXITIES.includes(value.projectComplexity as (typeof COMPLEXITIES)[number])) return invalid("projectComplexity");
+  if (!DOCUMENTATION.includes(value.documentationQuality as (typeof DOCUMENTATION)[number])) return invalid("documentationQuality");
   return {
     summary: boundedString(value.summary, "summary", 2000),
     detectedTechnologies: technologies,
     demonstratedDomains: domains,
     projectComplexity: value.projectComplexity as RepositoryAnalysisOutput["projectComplexity"],
     documentationQuality: value.documentationQuality as RepositoryAnalysisOutput["documentationQuality"],
-    architectureSignals: boundedArray(value.architectureSignals, "architecture signals", 20).map((item) => boundedString(item, "architecture signal", 300)),
-    engineeringSignals: boundedArray(value.engineeringSignals, "engineering signals", 20).map((item) => boundedString(item, "engineering signal", 300)),
-    limitations: boundedArray(value.limitations, "limitations", 20).map((item) => boundedString(item, "limitation", 300)),
+    architectureSignals: boundedArray(value.architectureSignals, "architectureSignals", 20).map((item, index) => boundedString(item, `architectureSignals[${index}]`, 300)),
+    engineeringSignals: boundedArray(value.engineeringSignals, "engineeringSignals", 20).map((item, index) => boundedString(item, `engineeringSignals[${index}]`, 300)),
+    limitations: boundedArray(value.limitations, "limitations", 20).map((item, index) => boundedString(item, `limitations[${index}]`, 300)),
     confidence: boundedNumber(value.confidence, "confidence"),
     evidenceReferences: references,
   };
 }
 
 export function validateDeveloperSummaryOutput(value: unknown): DeveloperSummaryOutput {
-  if (!isRecord(value)) throw new Error("Developer summary must be an object");
+  if (!isRecord(value)) return invalid("$");
   return {
-    profileSummary: boundedString(value.profileSummary, "profile summary", 2000),
-    limitations: boundedArray(value.limitations, "developer limitations", 20).map((item) => boundedString(item, "limitation", 300)),
+    profileSummary: boundedString(value.profileSummary, "profileSummary", 2000),
+    limitations: boundedArray(value.limitations, "limitations", 20).map((item, index) => boundedString(item, `limitations[${index}]`, 300)),
   };
 }
 

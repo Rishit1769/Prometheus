@@ -6,6 +6,7 @@ vi.mock("@/lib/intelligence/service", () => ({ analyzeDeveloper: vi.fn() }));
 
 import { auth } from "@/lib/auth";
 import { analyzeDeveloper } from "@/lib/intelligence/service";
+import { DeveloperAnalysisFailure } from "@/lib/intelligence/errors";
 import { POST } from "@/app/api/developer/analyze/route";
 
 const authMock = auth as unknown as Mock;
@@ -38,5 +39,22 @@ describe("POST /api/developer/analyze", () => {
     expect(response.status).toBe(503);
     expect(body.error.code).toBe("AI_NOT_CONFIGURED");
     expect(JSON.stringify(body)).not.toContain("API_KEY");
+  });
+
+  it("returns actionable safe diagnostics for total repository provider failure", async () => {
+    authMock.mockResolvedValue({ user: { id: "user-1" } });
+    analyzeMock.mockRejectedValue(new DeveloperAnalysisFailure({
+      stage: "provider",
+      code: "WORKSPACE_REGION_REQUIRED",
+      providerStatus: 400,
+      message: "Select Global in workspace privacy settings.",
+    }, 32));
+
+    const response = await POST();
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(body.error.code).toBe("ANALYSIS_PROVIDER_FAILED");
+    expect(body.error.diagnostic).toMatchObject({ stage: "provider", code: "WORKSPACE_REGION_REQUIRED", providerStatus: 400, failedRepositories: 32 });
   });
 });

@@ -2,6 +2,7 @@ import { prisma } from "@prometheus/database";
 import { aggregateRepositoryAnalyses } from "./aggregate";
 import { sha256 } from "./hash";
 import { createConfiguredIntelligenceModel } from "./model";
+import { DeveloperAnalysisFailure, diagnosticForError, formatDiagnostic, type IntelligenceDiagnostic } from "./errors";
 import { DEVELOPER_PROMPT_VERSION, DOMAIN_SCORING_VERSION, REPOSITORY_PROMPT_VERSION, REPOSITORY_SCHEMA_VERSION, type DeveloperSummaryInput, type IntelligenceModel, type RepositoryAnalysisInput, type RepositoryAnalysisOutput } from "./types";
 
 type DatabaseClient = typeof prisma;
@@ -15,8 +16,9 @@ export interface DeveloperAnalysisResult {
   developerProfileGenerated: boolean;
   developerProfileReused: boolean;
   coverage: number;
-  status: "COMPLETE" | "PARTIAL" | "FAILED";
+  status: "COMPLETE" | "PARTIAL" | "FAILED" | "EMPTY";
   modelRequests: number;
+  diagnostics?: IntelligenceDiagnostic;
 }
 
 function repositoryInput(repository: {
@@ -87,6 +89,7 @@ async function runDeveloperAnalysis(
   let reused = 0;
   let failed = 0;
   let modelRequests = 0;
+  let firstFailure: IntelligenceDiagnostic | undefined;
   const outputs: { repositoryId: string; repositoryName: string; output: RepositoryAnalysisOutput }[] = [];
   const work = repositories.map((repository) => ({ repository, input: repositoryInput(repository), evidenceHash: sha256({ promptVersion: REPOSITORY_PROMPT_VERSION, schemaVersion: REPOSITORY_SCHEMA_VERSION, provider: model.provider, modelName: model.modelName, input: repositoryInput(repository) }) }));
 
@@ -103,26 +106,62 @@ async function runDeveloperAnalysis(
       await db.repositoryAnalysis.update({ where: { repositoryId: repository.id }, data: { status: "COMPLETE", output: JSON.parse(JSON.stringify(output)), analyzedAt: new Date(), errorMessage: null } });
       outputs.push({ repositoryId: repository.id, repositoryName: repository.name, output });
       analyzed += 1;
-    } catch {
+    } catch (error) {
       failed += 1;
-      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "FAILED", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage: "Repository analysis failed." }, update: { status: "FAILED", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage: "Repository analysis failed." } });
+      const diagnostic = diagnosticForError(error, "persistence");
+      firstFailure ??= diagnostic;
+      const errorMessage = formatDiagnostic(diagnostic);
+      await db.repositoryAnalysis.upsert({ where: { repositoryId: repository.id }, create: { repositoryId: repository.id, status: "FAILED", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage }, update: { status: "FAILED", evidenceHash, promptVersion: REPOSITORY_PROMPT_VERSION, modelProvider: model.provider, modelName: model.modelName, errorMessage } });
     }
   });
+
+  const successfulRepositories = analyzed + reused;
+  if (repositories.length === 0 || successfulRepositories === 0) {
+    // Remove the legacy zero-coverage profile written by earlier PROM-004 code.
+    // Do not replace it with another cached profile that looks like an analysis.
+    await db.developerIntelligence.deleteMany({ where: { userId, coverage: 0, analyzedRepositories: 0 } });
+    if (repositories.length === 0) {
+      return {
+        repositoriesEligible: 0,
+        repositoriesAnalyzed: 0,
+        repositoriesReused: 0,
+        repositoriesFailed: 0,
+        developerProfileGenerated: false,
+        developerProfileReused: false,
+        coverage: 0,
+        status: "EMPTY",
+        modelRequests,
+      };
+    }
+    throw new DeveloperAnalysisFailure(
+      firstFailure ?? { stage: "provider", code: "ALL_REPOSITORIES_FAILED", message: "No repository produced validated intelligence output." },
+      failed,
+    );
+  }
 
   const aggregate = aggregateRepositoryAnalyses(outputs);
   const profileEvidenceHash = sha256({ scoringVersion: DOMAIN_SCORING_VERSION, promptVersion: DEVELOPER_PROMPT_VERSION, provider: model.provider, modelName: model.modelName, eligibleRepositories: work.map((item) => ({ repositoryId: item.repository.id, evidenceHash: item.evidenceHash, state: outputs.some((output) => output.repositoryId === item.repository.id) ? "COMPLETE" : "FAILED" })).sort((a, b) => a.repositoryId.localeCompare(b.repositoryId)) });
   const existingProfile = await db.developerIntelligence.findUnique({ where: { userId } });
-  if (existingProfile?.status === "COMPLETE" && existingProfile.evidenceHash === profileEvidenceHash) {
-    return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed + reused, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length, status: "COMPLETE", modelRequests };
+  if (existingProfile?.status === "COMPLETE" && existingProfile.coverage > 0 && existingProfile.evidenceHash === profileEvidenceHash) {
+    // Repair the timestamp on a valid profile updated by versions that did not
+    // advance generatedAt when replacing a prior zero-coverage result.
+    if (existingProfile.generatedAt < existingProfile.updatedAt) {
+      await db.developerIntelligence.update({ where: { userId }, data: { generatedAt: existingProfile.updatedAt } });
+    }
+    return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: false, developerProfileReused: true, coverage: repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length, status: "COMPLETE", modelRequests };
   }
   const summaryInput: DeveloperSummaryInput = { domains: aggregate.domains.map(({ domain, level, evidenceScore, confidence, repositoryCount }) => ({ domain, level, evidenceScore, confidence, repositoryCount })), technologies: aggregate.strongestTechnologies.map((name) => ({ name, repositoryCount: outputs.filter((item) => item.output.detectedTechnologies.some((technology) => technology.name === name)).length })), limitations: aggregate.limitations };
   let summary = fallbackSummary(summaryInput);
-  try { modelRequests += 1; summary = await model.summarizeDeveloper(summaryInput); } catch { /* deterministic fallback remains safe and evidence-limited */ }
+  let summaryFailure: IntelligenceDiagnostic | undefined;
+  try { modelRequests += 1; summary = await model.summarizeDeveloper(summaryInput); } catch (error) {
+    summaryFailure = diagnosticForError(error, "summary");
+  }
   const output = { ...aggregate, limitations: [...aggregate.limitations, ...summary.limitations] };
   const coverage = repositories.length === 0 ? 0 : (analyzed + reused) / repositories.length;
   const jsonOutput = JSON.parse(JSON.stringify(output));
-  await db.developerIntelligence.upsert({ where: { userId }, create: { userId, status: failed ? "PARTIAL" : "COMPLETE", evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.length === 0 ? 0 : outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: analyzed + reused, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput }, update: { status: failed ? "PARTIAL" : "COMPLETE", evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.length === 0 ? 0 : outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: analyzed + reused, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput } });
-  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed + reused, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status: failed ? "PARTIAL" : "COMPLETE", modelRequests };
+  const status = failed || summaryFailure ? "PARTIAL" : "COMPLETE";
+  await db.developerIntelligence.upsert({ where: { userId }, create: { userId, status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput }, update: { status, evidenceHash: profileEvidenceHash, promptVersion: DEVELOPER_PROMPT_VERSION, scoringVersion: DOMAIN_SCORING_VERSION, modelProvider: model.provider, modelName: model.modelName, profileSummary: summary.profileSummary, overallConfidence: outputs.reduce((sum, item) => sum + item.output.confidence, 0) / outputs.length, eligibleRepositories: repositories.length, analyzedRepositories: successfulRepositories, reusedRepositories: reused, failedRepositories: failed, coverage, output: jsonOutput, generatedAt: new Date() } });
+  return { repositoriesEligible: repositories.length, repositoriesAnalyzed: analyzed, repositoriesReused: reused, repositoriesFailed: failed, developerProfileGenerated: true, developerProfileReused: false, coverage, status, modelRequests, ...(firstFailure ?? summaryFailure ? { diagnostics: firstFailure ?? summaryFailure } : {}) };
 }
 
 export function analyzeDeveloper(userId: string, dependencies: { db?: DatabaseClient; model?: IntelligenceModel | null } = {}): Promise<DeveloperAnalysisResult> {

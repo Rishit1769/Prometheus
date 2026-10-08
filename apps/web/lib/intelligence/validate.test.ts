@@ -35,4 +35,16 @@ describe("repository analysis validation", () => {
   ])("rejects %s", (_name, change) => {
     expect(() => validateRepositoryAnalysisOutput({ ...valid, ...change })).toThrow();
   });
+
+  it("reports a precise issue path for a provider response with the wrong reference key", () => {
+    try {
+      validateRepositoryAnalysisOutput({
+        ...valid,
+        detectedTechnologies: [{ name: "TypeScript", evidence: [{ type: "LANGUAGE", ref: "TypeScript" }] }],
+      });
+      throw new Error("Expected strict validation to fail");
+    } catch (error) {
+      expect(error).toMatchObject({ diagnostic: { stage: "validation", code: "OUTPUT_SCHEMA_INVALID", validationIssuePaths: ["detectedTechnologies[0].evidence[0].reference"] } });
+    }
+  });
 });
