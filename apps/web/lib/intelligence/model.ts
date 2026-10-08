@@ -15,19 +15,22 @@ function parseModelJson(content: string | null | undefined): unknown {
 }
 
 export class OpenAIIntelligenceModel implements IntelligenceModel {
-  readonly provider = "openai";
+  readonly provider: string;
   readonly modelName: string;
+  readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly fetchFn: typeof fetch;
 
-  constructor(options: { apiKey: string; modelName: string; fetchFn?: typeof fetch }) {
+  constructor(options: { apiKey: string; modelName: string; provider?: string; baseUrl?: string; fetchFn?: typeof fetch }) {
     this.apiKey = options.apiKey;
     this.modelName = options.modelName;
+    this.provider = options.provider ?? "openai";
+    this.baseUrl = (options.baseUrl ?? "https://api.openai.com/v1").replace(/\/$/, "");
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
   private async complete(system: string, user: string): Promise<unknown> {
-    const response = await this.fetchFn("https://api.openai.com/v1/chat/completions", {
+    const response = await this.fetchFn(`${this.baseUrl}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(90_000),
@@ -57,6 +60,7 @@ export function createConfiguredIntelligenceModel(env: Record<string, string | u
   const apiKey = env.AI_API_KEY ?? env.OPENAI_API_KEY;
   if (!apiKey) return null;
   const provider = env.AI_PROVIDER ?? "openai";
-  if (provider !== "openai") throw new Error("Unsupported AI provider.");
-  return new OpenAIIntelligenceModel({ apiKey, modelName: env.AI_MODEL ?? env.OPENAI_MODEL ?? "gpt-4.1-mini" });
+  if (provider !== "openai" && provider !== "opencode") throw new Error("Unsupported AI provider.");
+  const defaultBaseUrl = provider === "opencode" ? "https://opencode.ai/zen/v1" : "https://api.openai.com/v1";
+  return new OpenAIIntelligenceModel({ apiKey, provider, modelName: env.AI_MODEL ?? env.OPENAI_MODEL ?? (provider === "opencode" ? "deepseek-v4.1-flash" : "gpt-4.1-mini"), baseUrl: env.AI_BASE_URL ?? env.OPENAI_BASE_URL ?? defaultBaseUrl });
 }
