@@ -39,9 +39,11 @@ PROM-004 uses an existing server-side OpenAI-compatible configuration when prese
 `AI_PROVIDER`, `AI_MODEL` (or `OPENAI_MODEL`), `AI_API_KEY` (or `OPENAI_API_KEY`), and optionally
 `AI_BASE_URL` (or `OPENAI_BASE_URL`). For OpenCode Zen, use provider `opencode`, model
 `deepseek-v4.1-flash`, and base URL `https://opencode.ai/zen/v1`; the adapter appends
-`/chat/completions` and requests JSON mode. The API key is never sent to the browser, stored in the
-database, or logged. If no key is configured, the analysis route returns `AI_NOT_CONFIGURED` and
-no model call is attempted.
+`/chat/completions`, sends a stable per-request `x-opencode-session`, and requests strict JSON Schema
+output with low reasoning effort and an output budget sized for the model. Do not use `/zen/go/v1`
+unless the workspace has an active Go subscription and its privacy region is set to Global. The
+API key is never sent to the browser, stored in the database, or logged. If no key is configured,
+the analysis route returns `AI_NOT_CONFIGURED` and no model call is attempted.
 
 See [.env.example](../../.env.example) for the full annotated list.
 

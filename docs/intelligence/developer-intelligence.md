@@ -11,6 +11,12 @@ The analyze route derives the user from the server session. It never trusts a cl
 repository failures do not erase successful analyses; coverage reports eligible, analyzed, reused,
 and failed repositories.
 
+If every eligible repository fails validation or provider execution, the API returns a sanitized
+502 diagnostic (stage, provider HTTP status when present, error code, validation paths, and failed
+count), and does not retain a zero-coverage developer profile. A previous legacy zero-coverage
+profile is removed on such a run. If no repositories are eligible, the endpoint returns `EMPTY`
+without caching a profile. Partial profiles remain valid only when coverage is greater than zero.
+
 Developer cache identity includes the complete eligible repository set, each current evidence hash,
 the analysis state (`COMPLETE` or `FAILED`), model/provider identity, prompt version, and scoring
 version. Consequently a partial profile is recalculated when failed repositories later succeed or

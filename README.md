@@ -123,6 +123,10 @@ eight-domain capability vector. The profile is evidence-backed and confidence-aw
 claim code quality, authorship, seniority, or production reliability. PROM-005 building state
 remains **Planned**.
 
+PROM-004 has been exercised against the configured OpenCode Zen provider: all 32 eligible public
+repositories were analyzed or reused with 100% coverage, and an unchanged second run made no model
+requests.
+
 Status vocabulary used across this repository:
 
 - **Implemented** — exists in the repository and has been verified.

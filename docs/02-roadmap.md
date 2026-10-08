@@ -45,7 +45,8 @@ milestone is complete when code, tests, and documentation all exist (see
 ## v0.4 — Developer Engineering Profile
 
 - **Outcome:** A multidimensional, evidence-based developer profile.
-- **Status:** In Development (PROM-004).
+- **Status:** Implemented (PROM-004). Live analysis verified against 32 eligible public repositories;
+  the second run reused all 32 without model requests.
 - **Exit criteria:** Documented scoring approach; explicit caveats that it is not absolute quality.
 - **Docs:** [intelligence/README.md](intelligence/README.md), [intelligence/domain-scoring.md](intelligence/domain-scoring.md).
 
